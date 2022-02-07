@@ -1,0 +1,12 @@
+name: py3
+
+dependencies:
+  - python=3.9
+  - pip
+  - tensorflow
+  - pytorch
+  - pip:
+    - pandas
+    - numpy
+    - gym
+    - -e .
