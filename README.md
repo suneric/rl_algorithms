@@ -22,3 +22,5 @@ python3 cartpole_test.py
 
 ## Referece
 - [Gym Documentation](https://www.gymlibrary.dev/)
+- [OpenAI Spinning up: Introduction to RL](https://spinningup.openai.com/en/latest/spinningup/rl_intro.html)
+- [Which RL algorithm to use where, when and in what scenario?](https://medium.datadriveninvestor.com/which-reinforcement-learning-rl-algorithm-to-use-where-when-and-in-what-scenario-e3e7617fb0b1)
