@@ -19,3 +19,6 @@ conda env update -f py3.yml
 ```
 python3 cartpole_test.py
 ```
+
+## Referece
+- [Gym Documentation](https://www.gymlibrary.dev/)
