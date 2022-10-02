@@ -102,8 +102,9 @@ class DDPG:
     def actor_model(self, numStates, numActions, upperBound):
         lastInit = tf.random_uniform_initializer(minval=-0.003,maxval=0.003)
         inputs = layers.Input(shape=(numStates,))
+        out = layers.Dense(512,activation='relu')(inputs)
         out = layers.Dense(256,activation='relu')(inputs)
-        out = layers.Dense(256,activation='relu')(out)
+        out = layers.Dense(128,activation='relu')(out)
         outputs = layers.Dense(numActions,activation='tanh',kernel_initializer=lastInit)(out)
         outputs = outputs*upperBound
         model = tf.keras.Model(inputs,outputs)
@@ -111,13 +112,13 @@ class DDPG:
 
     def critic_model(self, numStates, numActions):
         stateInput = layers.Input(shape=(numStates))
-        stateOut = layers.Dense(16, activation='relu')(stateInput)
-        stateOut = layers.Dense(32, activation='relu')(stateOut)
+        stateOut = layers.Dense(512, activation='relu')(stateInput)
+        stateOut = layers.Dense(256, activation='relu')(stateOut)
         actionInput = layers.Input(shape=(numActions))
-        actionOut = layers.Dense(32, activation='relu')(actionInput)
+        actionOut = layers.Dense(256, activation='relu')(actionInput)
         concat = layers.Concatenate()([stateOut, actionOut])
         out = layers.Dense(256, activation='relu')(concat)
-        out = layers.Dense(256, activation='relu')(out)
+        out = layers.Dense(128, activation='relu')(out)
         outputs = layers.Dense(1)(out)
         model = tf.keras.Model([stateInput,actionInput],outputs)
         return model
@@ -208,6 +209,31 @@ class ActionNoise:
     def __call__(self):
         return np.random.normal(self.mean,self.std_dev,self.size)
 
+class OUActionNoise:
+    def __init__(self,mean,std_dev,theta=0.15,dt=1e-2,x_init=None):
+        self.theta = theta
+        self.mean = mean
+        self.std_dev = std_dev
+        self.x_init = x_init
+        self.dt = dt
+        self.reset()
+
+    def __call__(self):
+        # Formula taken from https://www.wikipedia.org/wiki/Ornstein-Uhlenbeck_process.
+        x = (
+            self.x_prev
+            + self.theta * (self.mean - self.x_prev) * self.dt
+            + self.std_dev * np.sqrt(self.dt) * np.random.normal(size=self.mean.shape)
+        )
+        self.x_prev = x
+        return x
+
+    def reset(self):
+        if self.x_init is not None:
+            self.x_prev = self.x_init
+        else:
+            self.x_prev = np.zeros_like(self.mean)
+
 np.random.seed(123)
 
 if __name__ == '__main__':
@@ -232,22 +258,22 @@ if __name__ == '__main__':
         )
 
     memory = MemoryBuffer(50000,64,numStates,numActions)
-    noise = ActionNoise(mean=0,std_dev=0.3*upperBound,dim=numActions)
+    noise = OUActionNoise(mean=np.zeros(numActions),std_dev=0.1*upperBound)
     agent = DDPG(
         numStates = numStates,
         numActions = numActions,
         lowerBound = lowerBound,
         upperBound = upperBound,
         gamma = 0.99,
-        tau = 0.98,
-        lrCritic = 2e-4,
-        lrActor = 1e-4
+        tau = 0.995,
+        lrCritic = 2e-3,
+        lrActor = 1e-3
         )
 
     logDir = 'logs/ddpg' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     summaryWriter = tf.summary.create_file_writer(logDir)
 
-    totalEpisodes = 5000
+    totalEpisodes = 10000
     epReturnList, avgReturnList = [], []
     for ep in range(totalEpisodes):
         obs = env.reset()
@@ -274,6 +300,8 @@ if __name__ == '__main__':
         print("Episode * {} * average reward is ===> {}".format(ep, avgReward))
         avgReturnList.append(avgReward)
 
+    env.close()
+    
     plt.plot(avgReturnList)
     plt.xlabel('Episode')
     plt.ylabel('Avg. Episodic Reward')
