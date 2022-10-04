@@ -20,16 +20,8 @@ for device in gpu_devices:
 np.random.seed(123)
 
 if __name__ == '__main__':
-    env = gym.make(
-        "LunarLander-v2",
-        continuous = True,
-        gravity = -10.0,
-        enable_wind = False,
-        wind_power = 15.0,
-        turbulence_power = 1.5,
-        render_mode = 'human'
-    )
-
+    env = gym.make("Pendulum-v1", render_mode='human')
+    
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
     act_limit = env.action_space.high[0]
@@ -38,7 +30,7 @@ if __name__ == '__main__':
     buffer = ReplayBuffer(obs_dim,act_dim,size=50000,batch_size=128)
     noise = GSNoise(mean=0,std_dev=0.1*act_limit,size=act_dim)
     # noise = OUActionNoise(mean=np.zeros(act_dim),std_dev=0.1*act_limit)
-    hidden_sizes = [256,256]
+    hidden_sizes = [64,64]
     gamma = 0.99
     polyak = 0.995
     pi_lr = 1e-3
@@ -52,8 +44,8 @@ if __name__ == '__main__':
     update_after = 1000
     update_every = 50
 
-    total_episodes = 20000
-    max_steps = 500
+    total_episodes = 1000
+    max_steps = 200
 
     t = 0
     ep_ret_list, avg_ret_list = [], []

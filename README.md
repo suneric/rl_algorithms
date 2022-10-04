@@ -15,11 +15,6 @@ if you want to add more dependencies in py3.yml and then update the environment
 conda env update -f py3.yml
 ```
 
-## test environment
-```
-python3 cartpole_test.py
-```
-
 ## Referece
 - [Gym Documentation](https://www.gymlibrary.dev/)
 - [OpenAI Spinning up: Introduction to RL](https://spinningup.openai.com/en/latest/spinningup/rl_intro.html)

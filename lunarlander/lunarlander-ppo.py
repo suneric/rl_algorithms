@@ -43,6 +43,7 @@ import tensorflow.keras.backend as K
 from tensorflow.keras import layers
 from gym import wrappers
 import os
+import matplotlib.pyplot as plt
 
 """
 Replay Buffer, store experiences and calculate total rewards, advanteges
@@ -130,9 +131,8 @@ class ActorModel:
 
     def build_model(self):
         inputs = layers.Input(shape=(self.numStates,))
-        out = layers.Dense(512,activation='relu')(inputs)
         out = layers.Dense(256,activation='relu')(inputs)
-        out = layers.Dense(128,activation='relu')(out)
+        out = layers.Dense(256,activation='relu')(out)
         outputs = layers.Dense(self.numActions,activation=None)(out)
         model = tf.keras.Model(inputs,outputs)
         return model
@@ -169,9 +169,8 @@ class CriticModel:
 
     def build_model(self):
         inputs = layers.Input(shape=(self.numStates,))
-        out = layers.Dense(512,activation='relu')(inputs)
         out = layers.Dense(256,activation='relu')(inputs)
-        out = layers.Dense(128,activation='relu')(out)
+        out = layers.Dense(256,activation='relu')(out)
         outputs = layers.Dense(1,activation=None)(out)
         model = tf.keras.Model(inputs,outputs)
         return model
@@ -245,13 +244,14 @@ if __name__ == '__main__':
     buffer = MemoryBuffer(capacity=5000, numStates = numStates, gamma=0.99, lamda=0.97)
     agent = PPOAgent(numStates = numStates, numActions = numActions, clipRatio = 0.2, policyLR = 3e-4, valueLR = 1e-3, targetK1 = 0.01)
 
-    totalEpisodes = 1000
+    totalEpisodes = 10000
+    maxSteps = 100
     epReturnList, avgReturnList = [], []
     for ep in range(totalEpisodes):
         obs = env.reset()
         state = obs[0]
         epReturn = 0
-        while True:
+        for t in range(maxSteps):
             logprob, action, value = agent.action(state)
             obs = env.step(action[0].numpy())
             newState = obs[0]
@@ -264,7 +264,7 @@ if __name__ == '__main__':
             state = newState
 
         buffer.update()
-        agent.train(replyBuffer=buffer, itActor= 100, itCritic= 100)
+        agent.train(replyBuffer=buffer, itActor=100, itCritic=100)
         with summaryWriter.as_default():
             tf.summary.scalar('episode reward', epReturn, step=ep)
 
