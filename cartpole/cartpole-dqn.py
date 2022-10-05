@@ -1,13 +1,18 @@
+"""
+dqn
+https://www.tensorflow.org/agents/tutorials/0_intro_rl
+"""
 import sys
 sys.path.append('..')
 sys.path.append('.')
 import gym
 import numpy as np
 import tensorflow as tf
+import matplotlib.pyplot as plt
 import os
 import datetime
-from core.dqn import *
-import matplotlib.pyplot as plt
+from agent.dqn import DQN
+from agent.core import ReplayBuffer
 
 """
 https://www.tensorflow.org/guide/gpu#limiting_gpu_memory_growth
@@ -20,13 +25,13 @@ for device in gpu_devices:
 np.random.seed(123)
 
 if __name__ == '__main__':
-    env = gym.make('CartPole-v0', render_mode='human')
-
+    env = gym.make('CartPole-v1', render_mode='human')
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.n
+    print("state {}, action {}".format(obs_dim,act_dim))
 
-    buffer = ReplayBuffer(obs_dim,act_dim,size=50000,batch_size=64)
-    hidden_sizes = [64,64]
+    buffer = ReplayBuffer(obs_dim,act_dim,capacity=50000,batch_size=64,continuous=False)
+    hidden_sizes = [64,32]
     gamma = 0.99
     lr = 1e-3
     agent = DQN(obs_dim,act_dim,hidden_sizes,gamma,lr)
@@ -34,31 +39,29 @@ if __name__ == '__main__':
     logDir = 'logs/dqn' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     summaryWriter = tf.summary.create_file_writer(logDir)
 
-    epsilon, epsilon_stop = 0.99, 0.1
-    decay = 0.999
-    t, max_steps, sync_step = 0, 200, 50
     total_episodes = 1000
+    epsilon, epsilon_stop, decay = 0.99, 0.1, 0.99
+    t, update_after, sync_steps = 0, 1000, 100
     ep_ret_list, avg_ret_list = [], []
     for ep in range(total_episodes):
         epsilon = max(epsilon_stop, epsilon*decay)
         ep_ret, avg_ret = 0, 0
+        done = False
         state = env.reset()
         o = state[0]
-        for _ in range(max_steps): # an episode
+        while not done:
             a = agent.policy(o,epsilon)
-            print(a)
             state = env.step(a)
-            o2,r,d = state[0],state[1],state[2]
-            buffer.store(o,a,r,o2,d)
-            agent.learn(buffer)
-            o = o2
+            o2,r,done = state[0],state[1],state[2]
+            buffer.store(o,a,r,o2,done)
             ep_ret += r
             t += 1
-            if t % sync_step == 0:
-                agent.update_stable()
+            o = o2
 
-            if done:
-                break
+            if t > update_after:
+                agent.learn(buffer)
+            if t % sync_steps == 0:
+                agent.update_stable()
 
         with summaryWriter.as_default():
             tf.summary.scalar('episode reward', ep_ret, step=ep)
@@ -66,7 +69,7 @@ if __name__ == '__main__':
         ep_ret_list.append(ep_ret)
         avg_ret = np.mean(ep_ret_list[-40:])
         avg_ret_list.append(avg_ret)
-        print("Episode *{}* average reward is {}, total steps {}".format(ep, avg_ret, t))
+        print("Episode *{}* average reward is {}, total steps {}, epsilon {}".format(ep, avg_ret, t, epsilon))
 
     env.close()
 

@@ -7,7 +7,8 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import datetime
 import os
-from core.ddpg import *
+from agent.ddpg import DDPG
+from agent.core import ReplayBuffer, OUNoise, GSNoise
 
 """
 https://www.tensorflow.org/guide/gpu#limiting_gpu_memory_growth
@@ -35,53 +36,42 @@ if __name__ == '__main__':
     act_limit = env.action_space.high[0]
     print("state {}, action {}, limit {}".format(obs_dim,act_dim,act_limit))
 
-    buffer = ReplayBuffer(obs_dim,act_dim,size=50000,batch_size=128)
-    noise = GSNoise(mean=0,std_dev=0.1*act_limit,size=act_dim)
-    # noise = OUActionNoise(mean=np.zeros(act_dim),std_dev=0.1*act_limit)
-    hidden_sizes = [256,256]
+    buffer = ReplayBuffer(obs_dim,act_dim,capacity=500000,batch_size=64)
+    noise = GSNoise(mean=0,std_dev=0.2*act_limit,size=act_dim)
+    #noise = OUNoise(x=np.zeros(act_dim), mean=0,std_dev=0.1,theta=0.15,dt=0.01)
+    hidden_sizes = [256,256,64]
     gamma = 0.99
     polyak = 0.995
-    pi_lr = 1e-3
-    q_lr=1e-3
+    pi_lr = 1e-4
+    q_lr = 2e-4
     agent = DDPG(obs_dim,act_dim,hidden_sizes,act_limit,gamma,polyak,pi_lr,q_lr)
 
     logDir = 'logs/ddpg' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     summaryWriter = tf.summary.create_file_writer(logDir)
 
-    start_steps = 5000
-    update_after = 1000
-    update_every = 50
-
-    total_episodes = 20000
-    max_steps = 500
-
-    t = 0
+    total_episodes = 1000
+    t, start_steps, update_after, ep_max_step = 0, 5000, 1000, 400
     ep_ret_list, avg_ret_list = [], []
     for ep in range(total_episodes):
+        ep_ret, ep_step = 0, 0
+        done = False
         state = env.reset()
         o = state[0]
-        ep_ret = 0
-        for _ in range(max_steps):
+        while not done and ep_step < ep_max_step:
             if t > start_steps:
                 a = agent.policy(o, noise())
             else: # randomly select sample actions for better exploration
                 a = env.action_space.sample()
-
             state = env.step(a)
-            o2,r,d = state[0],state[1],state[2]
-            buffer.store(o,a,r,o2,d)
-
-            o = o2
-            ep_ret += r
+            o2,r,done = state[0],state[1],state[2]
+            buffer.store(o,a,r,o2,done)
             t += 1
+            ep_step += 1
+            ep_ret += r
+            o = o2
 
-            # update the network
-            if t > update_after and t % update_every == 0:
-                for _ in range(update_every):
-                    agent.learn(buffer)
-
-            if d:
-                break
+            if t > update_after:
+                agent.learn(buffer)
 
         with summaryWriter.as_default():
             tf.summary.scalar('episode reward', ep_ret, step=ep)
