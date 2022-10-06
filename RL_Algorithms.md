@@ -20,9 +20,9 @@ $$\mathbb{L}(\theta_i) = \mathbb{E}_{s,a,r,s' \sim \rho(.)}[(y_i - Q(s,a;\theta_
 
 where
 
-$$y_i = r + \gamma\max_{a'}Q(s',a';\theta_{i-1})$$.
+$$y_i = r + \gamma\max_{a'}Q(s',a';\theta_{i-1})$$
 
-Here,$y_i$ is called the TD(temporal difference) target, and $y_i - Q$ is called the TD error. $\rho$ represents the behavior distribution, the distribution over transition `{s,a,r,s'}` collected from the environment. **Note that the parameters from the previous $\theta_{i-1}$ are fixed and not updated**. In practice we use a snapshot of the network parameters from a few iterations ago instead of the last iteration. This copy is called the **target network**.  
+Here,`$y_i$` is called the TD(temporal difference) target, and $y_i - Q$ is called the TD error. $\rho$ represents the behavior distribution, the distribution over transition `{s,a,r,s'}` collected from the environment. **Note that the parameters from the previous $\theta_{i-1}$ are fixed and not updated**. In practice we use a snapshot of the network parameters from a few iterations ago instead of the last iteration. This copy is called the **target network**.  
 
 Q-Learning algorithm leans about the greedy policy $a = \max_aQ(s,a;\theta)$ while using a different behavior policy for acting in the environment/collecting data. This behavior policy is usually an $\epsilon$-greedy policy that selects the greedy action with probability $1-\epsilon$ and a random action with probability $\epsilon$ to ensure good coverage of the state-action space.
 
