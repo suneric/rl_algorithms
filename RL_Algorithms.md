@@ -116,7 +116,10 @@ A third option is **Trust-Region Policy Optimization** (TRPO). The motivation is
 <img src="https://github.com/suneric/rl_algorithms/blob/main/references/trpo_algo.svg" width=80% height=80%>
 </p>
 
-### PPO
+### PPO (Model-Free, On-Policy, Discrete or Continuous Action Space)
+PPO is motivated by the same question as TRPO: how can we take the biggest possible improvement step on a policy using the data we currently have, without stepping so far that we accidentally cause performance collapse? Where TROP tries to solve this problem with a complex second-order method, PPO is family of first-order methods that use few other tricks to keep new policies close to old. **PPO methods are significantly simpler to implement, and empirically seem to perform at least as well as TRPO**. There are two primary variants of PPO: PPO-Penalty and PPO-Clip.
+- **PPO-Penalty** approximately solves a KL-constrained update like TRPO, but penalizes the KL-divergence in the objective function instead of making it a hard constraint, and automatically adjusts the penalty coefficient over the course of training so that it's scaled appropriately.
+- **PPO-Clip** doesn't have a KL-divergence term in the objective and doesn't have a constraint at all. Instead relies on specialized clipping in the objective function to remove incentives for the new policies to get far from the old policy.
 
 <p align="center">
 <img src="https://github.com/suneric/rl_algorithms/blob/main/references/ppo_algo.svg" width=80% height=80%>
@@ -124,7 +127,10 @@ A third option is **Trust-Region Policy Optimization** (TRPO). The motivation is
 
 [PPO (Proximal Policy Optimization): Schulman et al, 2017](https://arxiv.org/abs/1707.06347)
 
-### DDPG
+### DDPG (Model-Free, Off-Policy, Continuous Action Space)
+**Deep Deterministic Policy Gradient (DDPG)** is an algorithm which concurrently learns a Q-function and a policy. It uses off-policy data and the Bellman equation to learn the Q-function, and use the Q-function to learn the policy. Which can be thought of as being DQN for continuous action spaces.
+
+DDPG interleaves learning an approximator to $Q^{\*}(s,a)$ with learning an approximator to $a^{\*}(s)$, and it does so in a way which is specifically adapted for environments with continuous action spaces. When there are a finite number of discrete actions, the max poses no problem, because we can just compute the Q-values for each action separately and directly compare them. (This also immediately gives us the action which maximizes the Q-value.) But when the action space is continuous, we can't exhaustively evaluate the space, and solving the optimization problem is highly non-trivial. Using a normal optimization algorithm would make calculating $\max_{a}Q^{\*}(s,a)$ a painfully expensive subroutine. And since it would need to be run every time the agent wants to take an action in the environment, this is unacceptable. Because the action space is continuous, the function $Q^{\*}(s,a)$ is presumed to be differentiable with respect to the action argument. This allow us to set up an efficient, gradient-based learning rule for a policy $\mu(s)$ which exploits that fact. Then instead of running an expensive optimization subroutine each time we wish to compute $\max_{a}Q^{\*}(s,a)$, we can approximate it with $\max_{a}Q^{\*}(s,a) \approx Q(s,\mu(s))$.
 
 <p align="center">
 <img src="https://github.com/suneric/rl_algorithms/blob/main/references/ddpg_algo.svg" width=80% height=80%>
@@ -132,7 +138,11 @@ A third option is **Trust-Region Policy Optimization** (TRPO). The motivation is
 
 [DDPG (Deep Deterministic Policy Gradient): Lillicrap et al, 2015](https://arxiv.org/abs/1509.02971)
 
-### TD3
+### TD3 (Model-Free, Off-Policy, Continuous Action Space)
+While DDPG can achieve great performance sometimes, it is frequently brittle with respect to hyper-parameters and other kinds of tuning. A common failure mode for DDPG is that **the learned Q-function begins to dramatically overestimate Q-values**, which then leads to the policy breaking, because it exploits the errors in the Q-function. **Twin Delayed DDPG (TD3)** addresses this issue by introducing three critical tricks:
+1. **Clipped Double-Q Learning**. TD3 learns two Q-functions instead of one (hence "twin"), and uses the smaller of the two Q-values to form the targets in the Bellman error loss functions.
+2. **"Delayed" Policy Updates**. TD3 updates the policy (and target network) less frequently than Q-function. The paper recommends one policy for every two Q-function updates.
+3. **Target Policy Smoothing**. TD3 adds noise to the target action, to make it harder for the policy to exploit Q-function errors by smoothing out Q along changes in action.
 
 <p align="center">
 <img src="https://github.com/suneric/rl_algorithms/blob/main/references/td3_algo.svg" width=80% height=80%>
@@ -140,7 +150,10 @@ A third option is **Trust-Region Policy Optimization** (TRPO). The motivation is
 
 [TD3 (Twin Delayed DDPG): Fujimoto et al, 2018](https://arxiv.org/abs/1802.09477)
 
-### SAC
+### SAC (Model-Free, Off-Policy, Continuous Action Space)
+**Soft Actor Critic (SAC)** is an algorithm that optimizes a stochastic policy in an off-policy way, forming a bridge between stochastic policy optimization and DDPG-style approaches. It isn't a direct successor to TD3, but it incorporates the clipped double-Q trick, and due to the inherent stochasticity of the policy in SAC, it also winds up benifiting from something like target policy smoothing.
+
+A central feature of SAC is **entropy regularization**. The policy is trained to maximize a trade-off between expected return and entropy, a measure of randomness in the policy. This has a close connection to the exploration-exploitation trade-off: increasing entropy results in more exploration, which can accelerate learning later on. It can also prevent the policy from prematurely converging to a bad local optimum.
 
 <p align="center">
 <img src="https://github.com/suneric/rl_algorithms/blob/main/references/sac_algo.svg" width=80% height=80%>

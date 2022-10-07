@@ -1,6 +1,5 @@
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras import layers
 from copy import deepcopy
 from .core import ActorCritic
 

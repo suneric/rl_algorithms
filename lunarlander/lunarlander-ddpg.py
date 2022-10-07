@@ -7,8 +7,8 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import datetime
 import os
+from agent.core import ReplayBuffer_Q, OUNoise, GSNoise
 from agent.ddpg import DDPG
-from agent.core import ReplayBuffer, OUNoise, GSNoise
 
 """
 https://www.tensorflow.org/guide/gpu#limiting_gpu_memory_growth
@@ -36,7 +36,7 @@ if __name__ == '__main__':
     act_limit = env.action_space.high[0]
     print("state {}, action {}, limit {}".format(obs_dim,act_dim,act_limit))
 
-    buffer = ReplayBuffer(obs_dim,act_dim,capacity=500000,batch_size=64)
+    buffer = ReplayBuffer_Q(obs_dim,act_dim,capacity=500000,batch_size=64)
     noise = GSNoise(mean=0,std_dev=0.2*act_limit,size=act_dim)
     #noise = OUNoise(x=np.zeros(act_dim), mean=0,std_dev=0.1,theta=0.15,dt=0.01)
     hidden_sizes = [256,256,64]

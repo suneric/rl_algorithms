@@ -7,7 +7,8 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import os
 import datetime
-from agent.ppo import ReplayBuffer, PPO
+from agent.core import ReplayBuffer_P
+from agent.ppo import PPO
 
 """
 https://www.tensorflow.org/guide/gpu#limiting_gpu_memory_growth
@@ -31,13 +32,13 @@ if __name__ == '__main__':
     critic_lr = 1e-3
     target_kl = 0.01
     agent = PPO(obs_dim, act_dim, hidden_sizes, clip_ratio, actor_lr, critic_lr, target_kl)
-    size = 4000
-    buffer = ReplayBuffer(obs_dim,act_dim,capacity=size,gamma=0.99,lamda=0.97)
+    size = 1000
+    buffer = ReplayBuffer_P(obs_dim,act_dim,capacity=size,gamma=0.99,lamda=0.97)
 
     logDir = 'logs/ppo' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     summaryWriter = tf.summary.create_file_writer(logDir)
 
-    total_epochs = 100
+    total_epochs = 2000
     t, ep, max_step = 0, 0, size
     ep_ret_list, avg_ret_list = [], []
     for _ in range(total_epochs):

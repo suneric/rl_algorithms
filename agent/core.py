@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers
+import scipy.signal
 
 """
 multiple layer perception model
@@ -12,6 +13,14 @@ def mlp_model(input_dim, output_dim, hidden_sizes, activation, output_activation
         x = layers.Dense(hidden_sizes[i], activation=activation)(x)
     output = layers.Dense(output_dim, activation=output_activation)(x)
     return tf.keras.Model(input, output)
+
+def discount_cumsum(x,discount):
+    """
+    magic from rllab for computing discounted cumulative sums of vectors
+    input: vector x: [x0, x1, x2]
+    output: [x0+discount*x1+discount^2*x2, x1+discount*x2, x2]
+    """
+    return scipy.signal.lfilter([1], [1, float(-discount)], x[::-1], axis=0)[::-1]
 
 """
 Actor-Critic
@@ -49,14 +58,14 @@ class ActorCritic:
         return self.pi(obs).numpy()
 
 """
-Replay Buffer for storing experiences
+Replay Buffer for Q-learning
 All standard algorithm for training a DNN to approximator Q*(s,a) make use of an experience replay buffer.
 This is the set D of previous experiences. In order for the algorithm to have stable behavior, the replay
 buffer should be large enough to contain a wide range of experiences, but it may not always be good to keep
 everything. If you only use the very-most recent data, you will overfit to that and things will break; if
 you use too much experience, you may slow down your learning. This may take some tuning to get right.
 """
-class ReplayBuffer:
+class ReplayBuffer_Q:
     def __init__(self, obs_dim, act_dim, capacity, batch_size, continuous = True):
         self.obs_buf = np.zeros((capacity, obs_dim),dtype=np.float32)
         self.nobs_buf = np.zeros((capacity, obs_dim),dtype=np.float32)
@@ -92,6 +101,57 @@ class ReplayBuffer:
             act = tf.convert_to_tensor(self.act_buf[idxs]),
             rew = tf.convert_to_tensor(self.rew_buf[idxs]),
             done = tf.convert_to_tensor(self.done_buf[idxs])
+        )
+
+"""
+Replay Buffer for Policy Optimization, store experiences and calculate total rewards, advanteges
+the buffer will be used for update the policy
+"""
+class ReplayBuffer_P:
+    def __init__(self, obs_dim, act_dim, capacity, gamma=0.99, lamda=0.95):
+        self.obs_buf = np.zeros((capacity, obs_dim), dtype=np.float32)
+        self.act_buf = np.zeros(capacity, dtype=np.int32)
+        self.rew_buf = np.zeros(capacity, dtype=np.float32)
+        self.ret_buf = np.zeros(capacity, dtype=np.float32)
+        self.val_buf = np.zeros(capacity, dtype=np.float32)
+        self.adv_buf = np.zeros(capacity, dtype=np.float32)
+        self.logprob_buf = np.zeros(capacity, dtype=np.float32)
+        self.gamma, self.lamda = gamma, lamda
+        self.ptr, self.traj_idx = 0, 0
+
+    def store(self, obs, act, rew, value, logprob):
+        self.obs_buf[self.ptr]=obs
+        self.act_buf[self.ptr]=act
+        self.rew_buf[self.ptr]=rew
+        self.val_buf[self.ptr]=value
+        self.logprob_buf[self.ptr]=logprob
+        self.ptr += 1
+
+    def finish_trajectory(self, last_value = 0):
+        """
+        For each epidode, calculating the total reward and advanteges with specific
+        """
+        path_slice = slice(self.traj_idx, self.ptr)
+        rews = np.append(self.rew_buf[path_slice], last_value)
+        vals = np.append(self.val_buf[path_slice], last_value)
+        deltas = rews[:-1] + self.gamma*vals[1:] - vals[:-1]
+        self.adv_buf[path_slice] = discount_cumsum(deltas, self.gamma*self.lamda) # GAE
+        self.ret_buf[path_slice] = discount_cumsum(rews, self.gamma)[:-1] # rewards-to-go
+        self.traj_idx = self.ptr
+
+    def get(self):
+        """
+        Get all data of the buffer and normalize the advantages
+        """
+        self.ptr, self.traj_idx = 0, 0
+        adv_mean, adv_std = np.mean(self.adv_buf), np.std(self.adv_buf)
+        self.adv_buf = (self.adv_buf-adv_mean) / adv_std
+        return dict(
+            obs=self.obs_buf,
+            act=self.act_buf,
+            adv=self.adv_buf,
+            ret=self.ret_buf,
+            logp=self.logprob_buf,
         )
 
 """

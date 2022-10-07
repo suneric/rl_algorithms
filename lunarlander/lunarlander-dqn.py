@@ -7,8 +7,8 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import os
 import datetime
+from agent.core import ReplayBuffer_Q
 from agent.dqn import DQN
-from agent.core import ReplayBuffer
 
 """
 https://www.tensorflow.org/guide/gpu#limiting_gpu_memory_growth
@@ -26,7 +26,7 @@ if __name__ == '__main__':
     act_dim = env.action_space.n
     print("state {}, action {}".format(obs_dim,act_dim))
 
-    buffer = ReplayBuffer(obs_dim,act_dim,capacity=50000,batch_size=64,continuous=False)
+    buffer = ReplayBuffer_Q(obs_dim,act_dim,capacity=50000,batch_size=64,continuous=False)
     hidden_sizes = [256,256,64]
     gamma = 0.99
     lr = 1e-4

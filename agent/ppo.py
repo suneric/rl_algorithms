@@ -1,3 +1,8 @@
+import numpy as np
+import tensorflow as tf
+import tensorflow.keras.backend as K
+from .core import *
+
 """
 PPO with tensorflow implementation
 
@@ -32,72 +37,6 @@ references:
 [2] https://spinningup.openai.com/en/latest/algorithms/ppo.html
 [3] https://github.com/suneric/door_open_rl/blob/main/do_learning/scripts/agents/ppo_mixed.py
 """
-
-import numpy as np
-import tensorflow as tf
-import scipy.signal
-import tensorflow.keras.backend as K
-from .core import *
-
-def discount_cumsum(x,discount):
-    """
-    magic from rllab for computing discounted cumulative sums of vectors
-    input: vector x: [x0, x1, x2]
-    output: [x0+discount*x1+discount^2*x2, x1+discount*x2, x2]
-    """
-    return scipy.signal.lfilter([1], [1, float(-discount)], x[::-1], axis=0)[::-1]
-
-"""
-Replay Buffer, store experiences and calculate total rewards, advanteges
-the buffer will be used for update the policy
-"""
-class ReplayBuffer:
-    def __init__(self, obs_dim, act_dim, capacity, gamma=0.99, lamda=0.95):
-        self.obs_buf = np.zeros((capacity, obs_dim), dtype=np.float32)
-        self.act_buf = np.zeros(capacity, dtype=np.int32)
-        self.rew_buf = np.zeros(capacity, dtype=np.float32)
-        self.ret_buf = np.zeros(capacity, dtype=np.float32)
-        self.val_buf = np.zeros(capacity, dtype=np.float32)
-        self.adv_buf = np.zeros(capacity, dtype=np.float32)
-        self.logprob_buf = np.zeros(capacity, dtype=np.float32)
-        self.gamma, self.lamda = gamma, lamda
-        self.ptr, self.traj_idx = 0, 0
-
-    def store(self, obs, act, rew, value, logprob):
-        self.obs_buf[self.ptr]=obs
-        self.act_buf[self.ptr]=act
-        self.rew_buf[self.ptr]=rew
-        self.val_buf[self.ptr]=value
-        self.logprob_buf[self.ptr]=logprob
-        self.ptr += 1
-
-    def finish_trajectory(self, last_value = 0):
-        """
-        For each epidode, calculating the total reward and advanteges with specific
-        """
-        path_slice = slice(self.traj_idx, self.ptr)
-        rews = np.append(self.rew_buf[path_slice], last_value)
-        vals = np.append(self.val_buf[path_slice], last_value)
-        deltas = rews[:-1] + self.gamma*vals[1:] - vals[:-1]
-        self.adv_buf[path_slice] = discount_cumsum(deltas, self.gamma*self.lamda) # GAE
-        self.ret_buf[path_slice] = discount_cumsum(rews, self.gamma)[:-1] # rewards-to-go
-        self.traj_idx = self.ptr
-
-    def get(self):
-        """
-        Get all data of the buffer and normalize the advantages
-        """
-        self.ptr, self.traj_idx = 0, 0
-        adv_mean, adv_std = np.mean(self.adv_buf), np.std(self.adv_buf)
-        self.adv_buf = (self.adv_buf-adv_mean) / adv_std
-        return dict(
-            obs=self.obs_buf,
-            act=self.act_buf,
-            adv=self.adv_buf,
-            ret=self.ret_buf,
-            logp=self.logprob_buf,
-        )
-
 class PPO:
     def __init__(self, obs_dim, act_dim, hidden_sizes, clip_ratio, actor_lr, critic_lr, target_kl):
         self.actor = mlp_model(obs_dim, act_dim, hidden_sizes, 'relu', None)
@@ -134,8 +73,8 @@ class PPO:
         ret_buf = data['ret']
         logprob_buf = data['logp']
         for _ in range(actor_iter):
-            k1 = self.update_pi(obs_buf, act_buf, logprob_buf, adv_buf)
-            if k1 > 1.5 * self.target_kl:
+            kl = self.update_pi(obs_buf, act_buf, logprob_buf, adv_buf)
+            if kl > 1.5 * self.target_kl:
                 break # Early Stopping
         for _ in range(critic_iter):
             self.update_q(obs_buf, ret_buf)
