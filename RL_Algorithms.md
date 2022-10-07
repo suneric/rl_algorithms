@@ -32,11 +32,40 @@ $$\nabla_{\theta}log P(\tau|\theta) = \sum_{t=0,T} \nabla_{\theta}log \pi_{\thet
 This is an expectation, which means that we can estimate it with a sample mean. If we collect a set of trajectory $\mathbb{D} = {\tau_i}_{i=1,...,N}$
 where each trajectory is obtained by letting the agent act in the environment using the policy $\pi_{\theta}$, the policy gradient can be estimated with
 
-$$\hat{g} = {1 /over |\mathbb{D}|}\sum_{\tau \in \mathbb{D}}\sum_{t=0,T}\nabla_{\theta}log\pi_{\theta}(a_t|s_t)R(\tau)$$
+$$\hat{g} = \frac{1}{|\mathbb{D}|}\sum_{\tau \in \mathbb{D}}\sum_{t=0,T}\nabla_{\theta}log\pi_{\theta}(a_t|s_t)R(\tau)$$
 
 where $|\mathbb{D}|$ is the number of trajectories in $\mathbb{D}$ (here, `N`).
 
 This last expression is the simplest version of the computable expression we desired. Assuming that we have represented our policy in a way which allows us to calculate $\nabla_{\theta}log\pi_{\theta}(a|s)$ and if we are able to run the policy in the environment to collect the trajectory dataset, we can compute the policy gradient and take an update step.  
+
+**EGLP Lemma**. Suppose the $P_{\theta}$ us a parameterized probability distribution over a random variable `x`. Then
+
+$$\mathbb{E}_{x \sim P_{\theta}}[\nabla_{\theta}log P_{\theta}(x)] = 0$$
+
+Agents should really only reinforce actions on the basis of their consequences. Rewards obtained before taking an action have no bearing on how good that action was: only rewards that come after. It turns out that this intuition shows up in the math, and we can show that policy gradient can also be expressed by
+
+$$\nabla_{\theta}J(\pi_{\theta}) = \mathbb{E}_{\tau \sim \pi_{\theta}}[\sum_{t=0,T}\nabla_{\theta}log\pi_{\theta}(a_t|s_t)\sum_{t'=t,T}R(s_{t'},a_{t'},s_{t'+1})]$$
+
+In this form, actions are only reinforced based on rewards obtained after they are taken. We call this form the **reward-to-go** policy gradient, because the sum of rewards after a point in a trajectory.
+
+**Baseline in Policy Gradients**. An immediate consequence of the EGLP lemma is that for any function `b` (called **baseline**) which only depends on state, allows us to add or subtract any number of terms to the form without changing it in expectation
+
+$$\nabla_{\theta}J(\pi_{\theta}) = \mathbb{E}_{\tau \sim \pi_{\theta}}[\sum_{t=0,T}\nabla_{\theta}log\pi_{\theta}(a_t|s_t)(\sum_{t'=t,T}R(s_{t'},a_{t'},s_{t'+1}) - b(s_t))]$$
+
+The most common choice of a baseline is the on-policy value function $V^{\pi}(s_t)$, this is the average return an agent gets if it starts in state $s_t$ and then acts according to policy $\pi$ for the rest of its life. Empirically, the choice $b(s_t) = V^{\pi}(s_t)$ has the desirable effect of reducing variance in the sample estimate for the policy gradient. This results in faster and more stable policy learning. It is also appealing from a conceptual angle: it encodes the intuition that if an agent gets what it expected, it should "feel" neutral about it. In practice, $\V^{\pi}(s_t)$ cannot be computed exactly, so it has to be approximated. This is usually done with a neural network $V_{\phi}(s_t)$, which is updated concurrently with the policy, the simplest method for learning $\V_{\phi}$, used in most implementations of policy optimization algorithms (including VPG, TRPO, PPO and A2C) is to minimize a mean-squared-error objective.
+
+**Other Forms of the Policy Gradient**. The policy gradient has a general form
+
+$$\nabla_{\theta}J(\pi_{\theta}) = \mathbb{E}[\sum_{t=0,T}\nabla_{\theta}log\pi_{\theta}(a_t|s_t)\Phi_t]$$
+
+where $\Phi_t$ could be
+1. On-Policy Action-Value Function $\Phi_t = Q^{\pi_{\theta}}(s_t,a_t)$.  
+2. The Advantage Function $A^{\pi}(s_t,a_t) = Q^{\pi}(s_t,a_t) - V^{\pi}(s_t)$ which describes how much better or worse it is than other actions on average.
+
+**Key Equations of Policy Optimization**. Let $\pi_{\theta}$ denote a policy with parameters $\theta$, and $J(\pi_{\theta})$ denote the expected finite-horizon undiscounted return of the policy. The gradient of $J(\pi_{\theta})$ is
+$$\nabla_{\theta}J(\pi_{\theta}) = \mathbb{E}_{\tau \sim \pi_{\theta}}[\sum_{t=0,T}\nabla_{\theta}log\pi_{\theta}(a_t|s_t)A^{\pi_{\theta}}(s_t,a_t)]$$ where $\tau$ is a trajectory and $A^{\pi_{\theta}}$ is the advantage function for the current policy. The policy gradient algorithm works by updating policy parameters via stochastic gradient ascent on policy performance:
+$$\theta_{k+1} = \theta_{k} + \alpha\nabla_{\theta}(\pi_{\theta_k})$$
+Policy gradient implementations typically compute advantage function estimates based on the infinite-horizon discounted return, despite otherwise using the finite-horizon undiscounted policy gradient formula.
 
 ## Popular Algorithms
 ### DQN (Model-Free, Off-Policy, Discrete Action Space)
@@ -56,15 +85,46 @@ To avoid computing the full experience in the DQN loss, we can minimize it using
 
 [DQN (Deep Q-Network), Mhih et al, 2013](https://www.cs.toronto.edu/~vmnih/docs/dqn.pdf)
 
-### VPG
+### VPG, NPG, TRPO (Model-Free, On-Policy, Discrete or Continuous Action Space)
+As promised, we can not only choose the target $\Phi_t$, but also have some freedom when it comes to the vector $g_t = \nabla log\pi_{theta}(a_t|s_t)$ in whose direction we update the parameter $\theta$.
+
+The simplest Policy Optimization algorithm is **Vanilla Policy Gradient** (VPG), which use $g_t = \nabla log\pi_{theta}(a_t|s_t)$. But this simple method has its drawback: gradient descent leads to small changes in the parameter $\theta$, but it doesn't make any guarantees about the changes in the policy $\pi$ itself. If the policy is very sensitive to the parameter around some value $\theta_0$, then taking a gradient step from there might change the policy a lot and actually make it worse. To avoid that, we'll need to use a small learning rate, which shows down convergence.
+
+<p align="center">
+<img src="https://github.com/suneric/rl_algorithms/blob/main/references/vpg_algo.svg" width=80% height=80%>
+</p>
+[TRPO (Trust Region Policy Optimization): Schulman et al, 2015](https://arxiv.org/abs/1502.05477)
+
+The solution is to use the **Natural Policy Gradient** (NPG) instead of the usual gradient. Instead of limiting the size of the step in parameter space, it directly limits the change of the policy at each step. Natural gradients are a general method for finding optimal probability distribution, not specific to RL, but NPG is probably their most well-know application. Computationally, **the natural gradient is just the normal gradient multiplied by the inverse Fisher matrix $F^{-1}$ of the policy**: $g_t = F^{-1}$\nabla log\pi_{theta}(a_t|s_t)$.
+
+A third option is **Trust-Region Policy Optimization** (TRPO). The motivation is similar to that of NPG: limit how much the policy changes (in terms of the KL divergence). But it takes that idea further and actually guarantees an upper bound on how much the policy will change. Use the same update vector as NPG with a learning rate that adapts at each step: $g_t = F^{-1}$\nabla log\pi_{theta}(a_t|s_t)$ and the adaptive learning rate $\alpha = \beta^j\sqrt{\frac{2\delta}{\tilde{g}F^{-1}\tilde{g}}}$ where $\tilde{g} = \Phi_tg_t$, $\beta \in (0,1)$ and $\delta$ are hyper-parameters and $j \in \mathbb{N}_0$ is chosen minimally such that a constraint on the KL divergence between old and new policy is satisfied.
+
+<p align="center">
+<img src="https://github.com/suneric/rl_algorithms/blob/main/references/trpo_algo.svg" width=80% height=80%>
+</p>
 
 ### PPO
+<p align="center">
+<img src="https://github.com/suneric/rl_algorithms/blob/main/references/ppo_algo.svg" width=80% height=80%>
+</p>
+[PPO (Proximal Policy Optimization): Schulman et al, 2017](https://arxiv.org/abs/1707.06347)
 
 ### DDPG
-
+<p align="center">
+<img src="https://github.com/suneric/rl_algorithms/blob/main/references/ddpg_algo.svg" width=80% height=80%>
+</p>
+[DDPG (Deep Deterministic Policy Gradient): Lillicrap et al, 2015](https://arxiv.org/abs/1509.02971
 ### TD3
+<p align="center">
+<img src="https://github.com/suneric/rl_algorithms/blob/main/references/td3_algo.svg" width=80% height=80%>
+</p>
+[TD3 (Twin Delayed DDPG): Fujimoto et al, 2018](https://arxiv.org/abs/1802.09477)
 
 ### SAC
+<p align="center">
+<img src="https://github.com/suneric/rl_algorithms/blob/main/references/sac_algo.svg" width=80% height=80%>
+</p>
+[SAC (Soft Actor-Critic): Haarnoja et al, 2018](https://arxiv.org/abs/1801.01290)
 
 ## References
 - [Open AI Spinning up, Introduction to RL](https://spinningup.openai.com/en/latest/spinningup/rl_intro2.html)
