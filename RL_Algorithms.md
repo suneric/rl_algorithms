@@ -108,9 +108,9 @@ But this simple method has its drawback: gradient descent leads to small changes
 
 The solution is to use the **Natural Policy Gradient** (NPG) instead of the usual gradient. Instead of limiting the size of the step in parameter space, it directly limits the change of the policy at each step. Natural gradients are a general method for finding optimal probability distribution, not specific to RL, but NPG is probably their most well-know application. Computationally, **the natural gradient is just the normal gradient multiplied by the inverse Fisher matrix $F^{-1}$ of the policy**:
 
-$$g_t = F^{-1}\nabla log\pi_{theta}(a_t|s_t)$$.
+$$g_t = F^{-1}\nabla log\pi_{theta}(a_t|s_t)$$
 
-A third option is **Trust-Region Policy Optimization** (TRPO). The motivation is similar to that of NPG: limit how much the policy changes (in terms of the KL divergence). But it takes that idea further and actually guarantees an upper bound on how much the policy will change. Use the same update vector as NPG with a learning rate that adapts at each step: $g_t = F^{-1}$\nabla log\pi_{theta}(a_t|s_t)$ and the adaptive learning rate $\alpha = \beta^j\sqrt{\frac{2\delta}{\tilde{g}F^{-1}\tilde{g}}}$ where $\tilde{g} = \Phi_tg_t$, $\beta \in (0,1)$ and $\delta$ are hyper-parameters and $j \in \mathbb{N}_0$ is chosen minimally such that a constraint on the KL divergence between old and new policy is satisfied.
+A third option is **Trust-Region Policy Optimization** (TRPO). The motivation is similar to that of NPG: limit how much the policy changes (in terms of the KL divergence). But it takes that idea further and actually guarantees an upper bound on how much the policy will change. Use the same update vector as NPG with a learning rate that adapts at each step: $g_t = F^{-1}\nabla log\pi_{theta}(a_t|s_t)$ and the adaptive learning rate $\alpha = \beta^j\sqrt{\frac{2\delta}{\tilde{g}F^{-1}\tilde{g}}}$ where $\tilde{g} = \Phi_tg_t$, $\beta \in (0,1)$ and $\delta$ are hyper-parameters and $j \in \mathbb{N}_0$ is chosen minimally such that a constraint on the KL divergence between old and new policy is satisfied.
 
 <p align="center">
 <img src="https://github.com/suneric/rl_algorithms/blob/main/references/trpo_algo.svg" width=80% height=80%>
@@ -129,7 +129,8 @@ A third option is **Trust-Region Policy Optimization** (TRPO). The motivation is
 <p align="center">
 <img src="https://github.com/suneric/rl_algorithms/blob/main/references/ddpg_algo.svg" width=80% height=80%>
 </p>
-[DDPG (Deep Deterministic Policy Gradient): Lillicrap et al, 2015](https://arxiv.org/abs/1509.02971
+
+[DDPG (Deep Deterministic Policy Gradient): Lillicrap et al, 2015](https://arxiv.org/abs/1509.02971)
 
 ### TD3
 
