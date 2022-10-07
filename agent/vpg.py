@@ -55,7 +55,9 @@ class VPG:
         adv_buf = data['adv']
         ret_buf = data['ret']
         logprob_buf = data['logp']
-        kl, ent = self.update_pi(obs_buf, act_buf, logprob_buf, adv_buf)
+        kl = 0.0
+        while kl < 1.5*self.target_kl:
+            kl, ent = self.update_pi(obs_buf, act_buf, logprob_buf, adv_buf)
         for _ in range(critic_iter):
             self.update_q(obs_buf, ret_buf)
         return kl, ent

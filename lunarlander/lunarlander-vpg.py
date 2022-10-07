@@ -60,8 +60,6 @@ if __name__ == '__main__':
                 with summaryWriter.as_default():
                     tf.summary.scalar('episode reward', ep_ret, step=ep)
 
-                kl, ent = agent.learn(buffer)
-
                 ep_ret_list.append(ep_ret)
                 avg_ret = np.mean(ep_ret_list[-40:])
                 avg_ret_list.append(avg_ret)
@@ -71,7 +69,7 @@ if __name__ == '__main__':
                 state = env.reset()
                 o = state[0]
 
-
+        kl, ent = agent.learn(buffer)
 
     env.close()
 
