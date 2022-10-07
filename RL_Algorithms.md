@@ -52,7 +52,7 @@ In this form, actions are only reinforced based on rewards obtained after they a
 
 $$\nabla_{\theta}J(\pi_{\theta}) = \mathbb{E}_{\tau \sim \pi_{\theta}}[\sum_{t=0,T}\nabla_{\theta}log\pi_{\theta}(a_t|s_t)(\sum_{t'=t,T}R(s_{t'},a_{t'},s_{t'+1}) - b(s_t))]$$
 
-The most common choice of a baseline is the on-policy value function $V^{\pi}(s_t)$, this is the average return an agent gets if it starts in state $s_t$ and then acts according to policy $\pi$ for the rest of its life. Empirically, the choice $b(s_t) = V^{\pi}(s_t)$ has the desirable effect of reducing variance in the sample estimate for the policy gradient. This results in faster and more stable policy learning. It is also appealing from a conceptual angle: it encodes the intuition that if an agent gets what it expected, it should "feel" neutral about it. In practice, $\V^{\pi}(s_t)$ cannot be computed exactly, so it has to be approximated. This is usually done with a neural network $V_{\phi}(s_t)$, which is updated concurrently with the policy, the simplest method for learning $\V_{\phi}$, used in most implementations of policy optimization algorithms (including VPG, TRPO, PPO and A2C) is to minimize a mean-squared-error objective.
+The most common choice of a baseline is the on-policy value function $V^{\pi}(s_t)$, this is the average return an agent gets if it starts in state $s_t$ and then acts according to policy $\pi$ for the rest of its life. Empirically, the choice $b(s_t) = V^{\pi}(s_t)$ has the desirable effect of reducing variance in the sample estimate for the policy gradient. This results in faster and more stable policy learning. It is also appealing from a conceptual angle: it encodes the intuition that if an agent gets what it expected, it should "feel" neutral about it. In practice, $V^{\pi}(s_t)$ cannot be computed exactly, so it has to be approximated. This is usually done with a neural network $V_{\phi}(s_t)$, which is updated concurrently with the policy, the simplest method for learning $V_{\phi}$, used in most implementations of policy optimization algorithms (including VPG, TRPO, PPO and A2C) is to minimize a mean-squared-error objective.
 
 **Other Forms of the Policy Gradient**. The policy gradient has a general form
 
@@ -63,11 +63,17 @@ where $\Phi_t$ could be
 2. The Advantage Function $A^{\pi}(s_t,a_t) = Q^{\pi}(s_t,a_t) - V^{\pi}(s_t)$ which describes how much better or worse it is than other actions on average.
 
 **Key Equations of Policy Optimization**. Let $\pi_{\theta}$ denote a policy with parameters $\theta$, and $J(\pi_{\theta})$ denote the expected finite-horizon undiscounted return of the policy. The gradient of $J(\pi_{\theta})$ is
-$$\nabla_{\theta}J(\pi_{\theta}) = \mathbb{E}_{\tau \sim \pi_{\theta}}[\sum_{t=0,T}\nabla_{\theta}log\pi_{\theta}(a_t|s_t)A^{\pi_{\theta}}(s_t,a_t)]$$ where $\tau$ is a trajectory and $A^{\pi_{\theta}}$ is the advantage function for the current policy. The policy gradient algorithm works by updating policy parameters via stochastic gradient ascent on policy performance:
+
+$$\nabla_{\theta}J(\pi_{\theta}) = \mathbb{E}_{\tau \sim \pi_{\theta}}[\sum_{t=0,T}\nabla_{\theta}log\pi_{\theta}(a_t|s_t)A^{\pi_{\theta}}(s_t,a_t)]$$
+
+where $\tau$ is a trajectory and $A^{\pi_{\theta}}$ is the advantage function for the current policy. The policy gradient algorithm works by updating policy parameters via stochastic gradient ascent on policy performance:
+
 $$\theta_{k+1} = \theta_{k} + \alpha\nabla_{\theta}(\pi_{\theta_k})$$
+
 Policy gradient implementations typically compute advantage function estimates based on the infinite-horizon discounted return, despite otherwise using the finite-horizon undiscounted policy gradient formula.
 
 ## Popular Algorithms
+
 ### DQN (Model-Free, Off-Policy, Discrete Action Space)
 For most problems, it is impractical to represent the Q-function as a table containing values for each combination of `s` and `a`, Instead, we train a **function approximator**, such as a neural network with parameter $\theta$, to estimate the Q-values. i.e $Q(s,a;\theta) \approx Q^{\*}(s,a)$. This can be done by minimizing the following loss at each step `i`:
 
@@ -86,16 +92,23 @@ To avoid computing the full experience in the DQN loss, we can minimize it using
 [DQN (Deep Q-Network), Mhih et al, 2013](https://www.cs.toronto.edu/~vmnih/docs/dqn.pdf)
 
 ### VPG, NPG, TRPO (Model-Free, On-Policy, Discrete or Continuous Action Space)
-As promised, we can not only choose the target $\Phi_t$, but also have some freedom when it comes to the vector $g_t = \nabla log\pi_{theta}(a_t|s_t)$ in whose direction we update the parameter $\theta$.
+As promised, we can not only choose the target $\Phi_t$, but also have some freedom when it comes to the vector $g_t = \nabla log\pi_{\theta}(a_t|s_t)$ in whose direction we update the parameter $\theta$.
 
-The simplest Policy Optimization algorithm is **Vanilla Policy Gradient** (VPG), which use $g_t = \nabla log\pi_{theta}(a_t|s_t)$. But this simple method has its drawback: gradient descent leads to small changes in the parameter $\theta$, but it doesn't make any guarantees about the changes in the policy $\pi$ itself. If the policy is very sensitive to the parameter around some value $\theta_0$, then taking a gradient step from there might change the policy a lot and actually make it worse. To avoid that, we'll need to use a small learning rate, which shows down convergence.
+The simplest Policy Optimization algorithm is **Vanilla Policy Gradient** (VPG), which use
+
+$$g_t = \nabla log\pi_{\theta}(a_t|s_t)$$
+
+But this simple method has its drawback: gradient descent leads to small changes in the parameter $\theta$, but it doesn't make any guarantees about the changes in the policy $\pi$ itself. If the policy is very sensitive to the parameter around some value $\theta_0$, then taking a gradient step from there might change the policy a lot and actually make it worse. To avoid that, we'll need to use a small learning rate, which shows down convergence.
 
 <p align="center">
 <img src="https://github.com/suneric/rl_algorithms/blob/main/references/vpg_algo.svg" width=80% height=80%>
 </p>
+
 [TRPO (Trust Region Policy Optimization): Schulman et al, 2015](https://arxiv.org/abs/1502.05477)
 
-The solution is to use the **Natural Policy Gradient** (NPG) instead of the usual gradient. Instead of limiting the size of the step in parameter space, it directly limits the change of the policy at each step. Natural gradients are a general method for finding optimal probability distribution, not specific to RL, but NPG is probably their most well-know application. Computationally, **the natural gradient is just the normal gradient multiplied by the inverse Fisher matrix $F^{-1}$ of the policy**: $g_t = F^{-1}$\nabla log\pi_{theta}(a_t|s_t)$.
+The solution is to use the **Natural Policy Gradient** (NPG) instead of the usual gradient. Instead of limiting the size of the step in parameter space, it directly limits the change of the policy at each step. Natural gradients are a general method for finding optimal probability distribution, not specific to RL, but NPG is probably their most well-know application. Computationally, **the natural gradient is just the normal gradient multiplied by the inverse Fisher matrix $F^{-1}$ of the policy**:
+
+$$g_t = F^{-1}\nabla log\pi_{theta}(a_t|s_t)$$.
 
 A third option is **Trust-Region Policy Optimization** (TRPO). The motivation is similar to that of NPG: limit how much the policy changes (in terms of the KL divergence). But it takes that idea further and actually guarantees an upper bound on how much the policy will change. Use the same update vector as NPG with a learning rate that adapts at each step: $g_t = F^{-1}$\nabla log\pi_{theta}(a_t|s_t)$ and the adaptive learning rate $\alpha = \beta^j\sqrt{\frac{2\delta}{\tilde{g}F^{-1}\tilde{g}}}$ where $\tilde{g} = \Phi_tg_t$, $\beta \in (0,1)$ and $\delta$ are hyper-parameters and $j \in \mathbb{N}_0$ is chosen minimally such that a constraint on the KL divergence between old and new policy is satisfied.
 
@@ -104,26 +117,34 @@ A third option is **Trust-Region Policy Optimization** (TRPO). The motivation is
 </p>
 
 ### PPO
+
 <p align="center">
 <img src="https://github.com/suneric/rl_algorithms/blob/main/references/ppo_algo.svg" width=80% height=80%>
 </p>
+
 [PPO (Proximal Policy Optimization): Schulman et al, 2017](https://arxiv.org/abs/1707.06347)
 
 ### DDPG
+
 <p align="center">
 <img src="https://github.com/suneric/rl_algorithms/blob/main/references/ddpg_algo.svg" width=80% height=80%>
 </p>
 [DDPG (Deep Deterministic Policy Gradient): Lillicrap et al, 2015](https://arxiv.org/abs/1509.02971
+
 ### TD3
+
 <p align="center">
 <img src="https://github.com/suneric/rl_algorithms/blob/main/references/td3_algo.svg" width=80% height=80%>
 </p>
+
 [TD3 (Twin Delayed DDPG): Fujimoto et al, 2018](https://arxiv.org/abs/1802.09477)
 
 ### SAC
+
 <p align="center">
 <img src="https://github.com/suneric/rl_algorithms/blob/main/references/sac_algo.svg" width=80% height=80%>
 </p>
+
 [SAC (Soft Actor-Critic): Haarnoja et al, 2018](https://arxiv.org/abs/1801.01290)
 
 ## References
