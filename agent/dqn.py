@@ -32,7 +32,7 @@ Reference:
 https://github.com/VXU1230/Medium-Tutorials/blob/master/dqn/cart_pole.py
 """
 class DQN:
-    def __init__(self, obs_dim, act_dim, hidden_sizes, gamma, lr):
+    def __init__(self, obs_dim, act_dim, hidden_sizes, gamma, lr, update_stable_freq):
         self.train = mlp_model(obs_dim, act_dim, hidden_sizes,'relu','linear')
         self.stable = deepcopy(self.train)
         print(self.train.summary())
@@ -40,11 +40,13 @@ class DQN:
         self.optimizer = tf.keras.optimizers.Adam(lr)
         self.gamma = gamma
         self.act_dim = act_dim
+        self.learn_iter = 0
+        self.update_stable_freq = update_stable_freq
 
-    """
-    get action based on epsilon greedy
-    """
     def policy(self, obs, epsilon):
+        """
+        get action based on epsilon greedy
+        """
         if np.random.random() < epsilon:
             return np.random.randint(self.act_dim)
         else:
@@ -60,6 +62,7 @@ class DQN:
         self.update_policy(obs_batch, act_batch, rew_batch, nobs_batch, done_batch)
 
     def update_policy(self, obs, act, rew, nobs, done):
+        self.learn_iter += 1
         """
         OPtimal Q-function follows Bellman Equation:
         Q*(s,a) = E [r + gamma*max(Q*(s',a'))]
@@ -78,9 +81,8 @@ class DQN:
         grad = tape.gradient(loss, self.train.trainable_variables)
         self.optimizer.apply_gradients(zip(grad, self.train.trainable_variables))
 
-    """
-    copy train network weights to stable network
-    """
-    def update_stable(self):
-        for a,b in zip(self.stable.trainable_variables, self.train.trainable_variables):
-            a.assign(b.numpy())
+        """
+        copy train network weights to stable network
+        """
+        if self.learn_iter % self.update_stable_freq == 0:
+            copy_network_variables(self.stable.trainable_variables, self.train.trainable_variables)

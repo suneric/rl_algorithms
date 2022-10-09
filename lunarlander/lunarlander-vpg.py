@@ -26,9 +26,9 @@ if __name__ == '__main__':
     act_dim = env.action_space.n
     print("state {}, action {}".format(obs_dim,act_dim))
 
-    hidden_sizes = [256,256,64]
+    hidden_sizes = [512,256,128]
     actor_lr = 3e-4
-    critic_lr = 1e-3
+    critic_lr = 3e-4
     target_kl = 0.01
     agent = VPG(obs_dim, act_dim, hidden_sizes, actor_lr, critic_lr, target_kl)
     size = 1000
@@ -44,7 +44,7 @@ if __name__ == '__main__':
         ep_ret, avg_ret = 0, 0
         state = env.reset()
         o = state[0]
-        for i in range(max_step):
+        for ep_step in range(max_step):
             a, logp, value = agent.policy(o)
             state = env.step(a[0].numpy())
             o2,r,done = state[0],state[1],state[2]
@@ -53,7 +53,7 @@ if __name__ == '__main__':
             t += 1
             o = o2
             # finish trajectory if reached to a terminal state
-            if done or (i == max_step-1):
+            if done or (ep_step == max_step-1):
                 last_value = 0 if done else agent.critic(tf.expand_dims(tf.convert_to_tensor(o), 0))
                 buffer.finish_trajectory(last_value)
 

@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from copy import deepcopy
-from .core import ActorCritic
+from .core import ActorCritic, copy_network_variables
 
 """
 https://spinningup.openai.com/en/latest/algorithms/ddpg.html
@@ -20,7 +20,7 @@ equation for all possible transition. So any transitions that we've ever experie
 are fair game when trying to fit a Q-function approximator via MSBE minimization.
 """
 class DDPG:
-    def __init__(self,obs_dim,act_dim,hidden_sizes,act_limit,gamma,polyak,pi_lr,q_lr):
+    def __init__(self,obs_dim,act_dim,hidden_sizes,act_limit,gamma,polyak,pi_lr,q_lr, noise_obj):
         self.ac = ActorCritic(obs_dim,act_dim,hidden_sizes,'relu',act_limit)
         self.ac_target = deepcopy(self.ac)
         self.pi_optimizer = tf.keras.optimizers.Adam(pi_lr)
@@ -28,10 +28,11 @@ class DDPG:
         self.gamma = gamma
         self.polyak = polyak
         self.act_limit = act_limit
+        self.noise_obj = noise_obj
 
-    def policy(self, obs, noise):
+    def policy(self, obs):
         state = tf.expand_dims(tf.convert_to_tensor(obs),0)
-        sampled_acts = tf.squeeze(self.ac.act(state)) + noise
+        sampled_acts = tf.squeeze(self.ac.act(state)) + self.noise_obj()
         return np.clip(sampled_acts, -self.act_limit, self.act_limit)
 
     def learn(self, buffer):
@@ -42,10 +43,7 @@ class DDPG:
         rew_batch = sampled_batch['rew']
         done_batch = sampled_batch['done']
         self.update_policy(obs_batch, act_batch, rew_batch, nobs_batch, done_batch)
-        self.update_target(self.ac_target.pi.variables, self.ac.pi.variables)
-        self.update_target(self.ac_target.q.variables, self.ac.q.variables)
 
-    @tf.function
     def update_policy(self, obs, act, rew, nobs, done):
         """
         Uses off-policy data and the Bellman equation to learn the Q-function
@@ -61,7 +59,6 @@ class DDPG:
             q_loss = tf.keras.losses.MSE(y, q)
         q_grad = tape.gradient(q_loss, self.ac.q.trainable_variables)
         self.q_optimizer.apply_gradients(zip(q_grad, self.ac.q.trainable_variables))
-
         """
         Use Q-function to learn policy
         Policy learning in DDPG is fairly simple. We want to learn a deterministic polict u(s) which
@@ -74,13 +71,6 @@ class DDPG:
             pi_loss = -tf.math.reduce_mean(q)
         pi_grad = tape.gradient(pi_loss, self.ac.pi.trainable_variables)
         self.pi_optimizer.apply_gradients(zip(pi_grad, self.ac.pi.trainable_variables))
-
-    @tf.function
-    def update_target(self,target_weights, weights):
-        """
-        In DQN-based algorithms, the target network is just copied over from the main network
-        every some-fixed-number of steps. In DDPG-style algorithm, the target network is updated
-        once per main network update by polyak averaging, where polyak(tau) usually close to 1.
-        """
-        for (a,b) in zip(target_weights, weights):
-            a.assign(a*self.polyak + b*(1-self.polyak))
+        # update target network with same parameters
+        copy_network_variables(self.ac_target.pi.variables, self.ac.pi.variables, self.polyak)
+        copy_network_variables(self.ac_target.q.variables, self.ac.q.variables, self.polyak)
