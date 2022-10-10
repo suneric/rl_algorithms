@@ -50,8 +50,6 @@ class ActorCritic:
     def __init__(self, obs_dim, act_dim, hidden_sizes, activation, act_limit):
         self.pi = self.actor_model(obs_dim, act_dim, hidden_sizes, activation, act_limit)
         self.q = self.critic_model(obs_dim, act_dim, hidden_sizes, activation)
-        print(self.pi.summary())
-        print(self.q.summary())
 
     def actor_model(self, obs_dim, act_dim, hidden_sizes, activation, act_limit):
         input = layers.Input(shape=(obs_dim,))

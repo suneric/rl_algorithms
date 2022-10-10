@@ -40,6 +40,10 @@ class VPG:
         value = self.critic(state)
         return action, logprob, value
 
+    def value(self, obs):
+        state = tf.expand_dims(tf.convert_to_tensor(obs), 0)
+        return self.critic(state)
+
     def logprobabilities(self, logits, action):
         """
         Compute the log-probabilities of taking actions by using logits (e.g. output of the actor)

@@ -26,16 +26,16 @@ if __name__ == '__main__':
     act_dim = env.action_space.n
     print("state {}, action {}".format(obs_dim,act_dim))
 
-    buffer = ReplayBuffer_Q(obs_dim,act_dim,capacity=500000,batch_size=128,continuous=False)
-    hidden_sizes = [512,256,128]
+    buffer = ReplayBuffer_Q(obs_dim,act_dim,capacity=500000,batch_size=64,continuous=False)
+    hidden_sizes = [256,256,64]
     gamma = 0.99
-    lr = 3e-4
+    lr = 2e-4
     agent = DQN(obs_dim,act_dim,hidden_sizes,gamma,lr,update_stable_freq=300)
 
     logDir = 'logs/dqn' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     summaryWriter = tf.summary.create_file_writer(logDir)
 
-    total_episodes = 2000
+    total_episodes = 1000
     epsilon, epsilon_stop, decay = 0.99, 0.1, 0.995
     t, start_steps, ep_max_step = 0, 5000, 500
     ep_ret_list, avg_ret_list = [], []

@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from copy import deepcopy
-from .core import ActorTwinCritic
+from .core import ActorTwinCritic, copy_network_variables
 
 """
 https://spinningup.openai.com/en/latest/algorithms/td3.html
@@ -32,9 +32,9 @@ class TD3:
         act_batch = sampled_batch['act']
         rew_batch = sampled_batch['rew']
         done_batch = sampled_batch['done']
-        self.update_policy(obs_batch, act_batch, rew_batch, nobs_batch, done_batch)
+        self.update(obs_batch, act_batch, rew_batch, nobs_batch, done_batch)
 
-    def update_policy(self, obs, act, rew, nobs, done):
+    def update(self, obs, act, rew, nobs, done):
         self.learn_iter += 1
         """
         Trick 1: learn two Q-function and use the smaller one of two Q values

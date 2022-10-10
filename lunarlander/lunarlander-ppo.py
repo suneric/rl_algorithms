@@ -26,51 +26,48 @@ if __name__ == '__main__':
     act_dim = env.action_space.n
     print("state {}, action {}".format(obs_dim,act_dim))
 
-    hidden_sizes = [512,256,128]
+    hidden_sizes = [256,256,64]
     clip_ratio = 0.2
-    actor_lr = 3e-4
-    critic_lr = 3e-3
+    actor_lr = 1e-4
+    critic_lr = 2e-4
     target_kl = 0.01
     agent = PPO(obs_dim, act_dim, hidden_sizes, clip_ratio, actor_lr, critic_lr, target_kl)
-    size = 1000
-    buffer = ReplayBuffer_P(obs_dim,act_dim,capacity=size,gamma=0.99,lamda=0.97)
+    buffer = ReplayBuffer_P(obs_dim,act_dim,capacity=10000,gamma=0.99,lamda=0.97)
 
     logDir = 'logs/ppo' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     summaryWriter = tf.summary.create_file_writer(logDir)
 
-    total_epochs = 2000
-    t, ep, max_step = 0, 0, size
+    total_episodes = 1000
+    t, max_step, update_steps = 0, 500, 3000
     ep_ret_list, avg_ret_list = [], []
-    for _ in range(total_epochs):
-        ep_ret, avg_ret = 0, 0
+    for ep in range(total_episodes):
+        ep_ret, ep_step = 0, 0
+        done = False
         state = env.reset()
         o = state[0]
-        for ep_step in range(max_step):
+        while not done and ep_step < max_step:
             a, logp, value = agent.policy(o)
             state = env.step(a[0].numpy())
             o2,r,done = state[0],state[1],state[2]
             buffer.store(o,a,r,value,logp)
-            ep_ret += r
             t += 1
+            ep_step += 1
+            ep_ret += r
             o = o2
-            # finish trajectory if reached to a terminal state
-            if done or (ep_step == max_step-1):
-                last_value = 0 if done else agent.critic(tf.expand_dims(tf.convert_to_tensor(o), 0))
-                buffer.finish_trajectory(last_value)
 
-                with summaryWriter.as_default():
-                    tf.summary.scalar('episode reward', ep_ret, step=ep)
+        last_value = 0 if done else agent.value(o)
+        buffer.finish_trajectory(last_value) # finish trajectory if reached to a terminal state
 
-                ep_ret_list.append(ep_ret)
-                avg_ret = np.mean(ep_ret_list[-40:])
-                avg_ret_list.append(avg_ret)
-                print("Episode *{}* average reward is {}, total steps {}".format(ep, avg_ret, t))
-                ep += 1
-                ep_ret, avg_ret = 0, 0
-                state = env.reset()
-                o = state[0]
+        if buffer.ptr > update_steps:
+            agent.learn(buffer)
 
-        agent.learn(buffer, actor_iter=120, critic_iter=120)
+        with summaryWriter.as_default():
+            tf.summary.scalar('episode reward', ep_ret, step=ep)
+
+        ep_ret_list.append(ep_ret)
+        avg_ret = np.mean(ep_ret_list[-40:])
+        avg_ret_list.append(avg_ret)
+        print("Episode *{}* average reward is {}, total steps {}".format(ep, avg_ret, t))
 
     env.close()
 

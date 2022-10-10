@@ -35,8 +35,6 @@ class DQN:
     def __init__(self, obs_dim, act_dim, hidden_sizes, gamma, lr, update_stable_freq):
         self.train = mlp_model(obs_dim, act_dim, hidden_sizes,'relu','linear')
         self.stable = deepcopy(self.train)
-        print(self.train.summary())
-        print(self.stable.summary())
         self.optimizer = tf.keras.optimizers.Adam(lr)
         self.gamma = gamma
         self.act_dim = act_dim
@@ -59,9 +57,9 @@ class DQN:
         act_batch = sampled_batch['act']
         rew_batch = sampled_batch['rew']
         done_batch = sampled_batch['done']
-        self.update_policy(obs_batch, act_batch, rew_batch, nobs_batch, done_batch)
+        self.update(obs_batch, act_batch, rew_batch, nobs_batch, done_batch)
 
-    def update_policy(self, obs, act, rew, nobs, done):
+    def update(self, obs, act, rew, nobs, done):
         self.learn_iter += 1
         """
         OPtimal Q-function follows Bellman Equation:

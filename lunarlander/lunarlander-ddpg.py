@@ -36,20 +36,20 @@ if __name__ == '__main__':
     act_limit = env.action_space.high[0]
     print("state {}, action {}, limit {}".format(obs_dim,act_dim,act_limit))
 
-    buffer = ReplayBuffer_Q(obs_dim,act_dim,capacity=500000,batch_size=128)
-    noise = GSNoise(mean=0,std_dev=0.2*act_limit,size=act_dim)
-    #noise = OUNoise(x=np.zeros(act_dim), mean=0,std_dev=0.1,theta=0.15,dt=0.01)
-    hidden_sizes = [512,256,128]
+    buffer = ReplayBuffer_Q(obs_dim,act_dim,capacity=500000,batch_size=64)
+    #noise = GSNoise(mean=0,std_dev=0.2*act_limit,size=act_dim)
+    noise = OUNoise(x=np.zeros(act_dim),mean=0,std_dev=0.1,theta=0.15,dt=0.01)
+    hidden_sizes = [256,256,64]
     gamma = 0.99
     polyak = 0.995
-    pi_lr = 3e-4
-    q_lr = 3e-4
+    pi_lr = 1e-3
+    q_lr = 2e-3
     agent = DDPG(obs_dim,act_dim,hidden_sizes,act_limit,gamma,polyak,pi_lr,q_lr,noise)
 
     logDir = 'logs/ddpg' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     summaryWriter = tf.summary.create_file_writer(logDir)
 
-    total_episodes = 2000
+    total_episodes = 1000
     t, start_steps, ep_max_step = 0, 5000, 500
     ep_ret_list, avg_ret_list = [], []
     for ep in range(total_episodes):
@@ -59,7 +59,7 @@ if __name__ == '__main__':
         o = state[0]
         while not done and ep_step < ep_max_step:
             if t > start_steps:
-                a = agent.policy(o, noise())
+                a = agent.policy(o)
             else: # randomly select sample actions for better exploration
                 a = env.action_space.sample()
             state = env.step(a)

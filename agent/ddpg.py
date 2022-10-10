@@ -42,9 +42,9 @@ class DDPG:
         act_batch = sampled_batch['act']
         rew_batch = sampled_batch['rew']
         done_batch = sampled_batch['done']
-        self.update_policy(obs_batch, act_batch, rew_batch, nobs_batch, done_batch)
+        self.update(obs_batch, act_batch, rew_batch, nobs_batch, done_batch)
 
-    def update_policy(self, obs, act, rew, nobs, done):
+    def update(self, obs, act, rew, nobs, done):
         """
         Uses off-policy data and the Bellman equation to learn the Q-function
         Q*(s,a) = E [r(s,a) + gamma x max(Q*(s',a'))]
@@ -53,8 +53,8 @@ class DDPG:
         """
         with tf.GradientTape() as tape:
             target_act = self.ac_target.pi(nobs)
-            target_q = tf.squeeze(self.ac_target.q([nobs,target_act]),1)
-            q = tf.squeeze(self.ac.q([obs, act]), 1)
+            target_q = self.ac_target.q([nobs,target_act])
+            q = self.ac.q([obs, act])
             y = rew + self.gamma * (1-done) * target_q
             q_loss = tf.keras.losses.MSE(y, q)
         q_grad = tape.gradient(q_loss, self.ac.q.trainable_variables)
