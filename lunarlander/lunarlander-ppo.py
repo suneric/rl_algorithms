@@ -47,7 +47,7 @@ if __name__ == '__main__':
         o = state[0]
         while not done and ep_step < max_step:
             a, logp, value = agent.policy(o)
-            state = env.step(a[0].numpy())
+            state = env.step(tf.squeeze(a).numpy())
             o2,r,done = state[0],state[1],state[2]
             buffer.store(o,a,r,value,logp)
             t += 1

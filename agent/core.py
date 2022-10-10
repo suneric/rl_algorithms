@@ -2,8 +2,9 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers
 import scipy.signal
+import tensorflow_probability as tfp
 
-def mlp_model(input_dim, output_dim, hidden_sizes, activation, output_activation):
+def mlp_model(input_dim, output_dim, hidden_sizes, activation, output_activation, output_limit=None):
     """
     multiple layer perception model
     """
@@ -11,7 +12,10 @@ def mlp_model(input_dim, output_dim, hidden_sizes, activation, output_activation
     x = layers.Dense(hidden_sizes[0], activation=activation)(input)
     for i in range(1, len(hidden_sizes)):
         x = layers.Dense(hidden_sizes[i], activation=activation)(x)
-    output = layers.Dense(output_dim, activation=output_activation)(x)
+    initializer = tf.keras.initializers.RandomUniform(minval=-0.003, maxval=0.003)
+    output = layers.Dense(output_dim, activation=output_activation, kernel_initializer=initializer)(x)
+    if output_limit:
+        output = output*output_limit
     return tf.keras.Model(input, output)
 
 def discount_cumsum(x,discount):
@@ -41,25 +45,28 @@ def copy_network_variables(target_weights, from_weights, polyak = 0.0):
     for (a,b) in zip(target_weights, from_weights):
         a.assign(a*polyak + b*(1-polyak))
 
-class ActorCritic:
-    """
-    Actor-Critic
-    pi: policy network
-    q: q-function network
-    """
-    def __init__(self, obs_dim, act_dim, hidden_sizes, activation, act_limit):
-        self.pi = self.actor_model(obs_dim, act_dim, hidden_sizes, activation, act_limit)
-        self.q = self.critic_model(obs_dim, act_dim, hidden_sizes, activation)
 
-    def actor_model(self, obs_dim, act_dim, hidden_sizes, activation, act_limit):
-        input = layers.Input(shape=(obs_dim,))
-        x = layers.Dense(hidden_sizes[0],activation=activation)(input)
-        for i in range(1, len(hidden_sizes)):
-            x = layers.Dense(hidden_sizes[i], activation=activation)(x)
-        initializer = tf.keras.initializers.RandomUniform(minval=-0.003, maxval=0.003)
-        output = layers.Dense(act_dim, activation='tanh', kernel_initializer=initializer)(x)
-        output = output * act_limit
-        return tf.keras.Model(input, output)
+class Actor(tf.keras.Model):
+    """
+    Actor Network: give a observation, return an action
+    """
+    def __init__(self,obs_dim,act_dim,hidden_sizes,activation,act_limit):
+        super(Actor, self).__init__()
+        self.logits_net = mlp_model(obs_dim,act_dim,hidden_sizes,activation,"tanh",act_limit)
+
+    def call(self, obs):
+        return self.logits_net(obs)
+
+class Critic(tf.keras.Model):
+    """
+    Critic Network, give an pair of (obsercation, action), return a value
+    """
+    def __init__(self,obs_dim,act_dim,hidden_sizes,activation):
+        super(Critic, self).__init__()
+        self.value_net = self.critic_model(obs_dim, act_dim, hidden_sizes, activation)
+
+    def call(self, obs, act):
+        return self.value_net([obs, act])
 
     def critic_model(self, obs_dim, act_dim, hidden_sizes, activation):
         obs_input = layers.Input(shape=(obs_dim))
@@ -71,24 +78,27 @@ class ActorCritic:
         model = tf.keras.Model([obs_input,act_input], output)
         return model
 
-    def act(self, obs):
-        return self.pi(obs).numpy()
-
-class Actor(tf.keras.Model):
+class GaussianActor(tf.keras.Model):
     def __init__(self, obs_dim, act_dim, hidden_sizes, activation, act_limit):
-        super(Actor, self).__init__()
-        self.input_layer = layers.Dense(obs_dim, activation = activation)
+        super(GaussianActor, self).__init__()
+        self.input_layer = layers.Dense(obs_dim,activation=activation)
         self.hidden_layers = create_hidden_layers(hidden_sizes, activation)
-        self.output_layer = layers.Dense(act_dim, activation='tanh',
+        self.mean = layers.Dense(act_dim,
             kernel_initializer=tf.random_uniform_initializer(minval=-0.003, maxval=0.003))
-        self.act_limit = act_limit
+        self.log_std = layers.Dense(act_dim,
+            kernel_initializer=tf.random_uniform_initializer(minval=-0.003, maxval=0.003))
 
     def call(self, obs):
         x = self.input_layer(obs)
         for hidden_layer in self.hidden_layers:
             x = hidden_layer(x)
-        x = self.output_layer(x)
-        return x * self.act_limit
+        mu = self.mean(x)
+        ls = self.log_std(x)
+        pi = tfp.distributions.Normal(loc=mu,scale=tf.clip_by_value(tf.exp(ls),-20,2))
+        action = tf.stop_gradient(pi.sample())
+        squashed_actions = tf.tanh(action)
+        logp = tf.reduce_sum(pi.log_prob(action), axis=-1)
+        return squashed_actions, logp
 
 class TwinCritic(tf.keras.Model):
     def __init__(self, obs_dim, act_dim, hidden_sizes, activation):
@@ -105,16 +115,8 @@ class TwinCritic(tf.keras.Model):
             kernel_initializer=tf.random_uniform_initializer(minval=-0.003, maxval=0.003))
 
     def call(self, obs, act):
-        x = tf.concat([obs,act], 1)
-        x1 = self.input_layer_1(x)
-        for hidden_layer in self.hidden_layers_1:
-            x1 = hidden_layer(x1)
-        x1 = self.output_layer_1(x1)
-
-        x2 = self.input_layer_1(x)
-        for hidden_layer in self.hidden_layers_2:
-            x2 = hidden_layer(x2)
-        x2 = self.output_layer_1(x2)
+        x1 = self.Q1(obs,act)
+        x2 = self.Q2(obs,act)
         return x1, x2
 
     def Q1(self, obs, act):
@@ -124,6 +126,27 @@ class TwinCritic(tf.keras.Model):
             x1 = hidden_layer(x1)
         x1 = self.output_layer_1(x1)
         return x1
+
+    def Q2(self, obs, act):
+        x = tf.concat([obs,act], 1)
+        x2 = self.input_layer_2(x)
+        for hidden_layer in self.hidden_layers_2:
+            x2 = hidden_layer(x2)
+        x2 = self.output_layer_2(x2)
+        return x2
+
+class ActorCritic:
+    """
+    Actor-Critic
+    pi: policy network
+    q: q-function network
+    """
+    def __init__(self, obs_dim, act_dim, hidden_sizes, activation, act_limit):
+        self.pi = Actor(obs_dim, act_dim, hidden_sizes, activation, act_limit)
+        self.q = Critic(obs_dim, act_dim, hidden_sizes, activation)
+
+    def act(self, obs):
+        return self.pi(obs).numpy()
 
 class ActorTwinCritic:
     """

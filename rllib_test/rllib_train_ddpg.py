@@ -16,15 +16,15 @@ config['env'] = 'LunarLanderContinuous-v2'
 config['twin_q'] = False # true for TD3
 config['target_noise'] = 0.2
 config['target_noise_clip'] = 0.5
-config['actor_hiddens'] = [256,256]
+config['actor_hiddens'] = [256,256,64]
 config['actor_hidden_activation'] = 'relu'
-config['critic_hiddens'] = [256,256]
+config['critic_hiddens'] = [256,256,64]
 config['critic_hidden_activation'] = 'relu'
-config['actor_lr'] = 1e-3
+config['actor_lr'] = 1e-4
 config['critic_lr'] = 1e-3
 config['gamma'] = 0.99
-config['tau'] = 0.002
-config['train_batch_size'] = 128
+config['tau'] = 0.005
+config['train_batch_size'] = 64
 # config['exploration_config']
 # config['replay_buffer_config']
 config['num_gpus'] = 1
@@ -56,10 +56,8 @@ analysis = tune.run(
     stop = {"training_iteration": 100},
     config = {
         "env": 'LunarLanderContinuous-v2',
-        "num_workers": 4,
-        "gamma": tune.grid_search([0.999, 0.8]),
-        "actor_lr": tune.grid_search([1e-3,1e-4]),
-        "critic_lr": tune.grid_search([1e-3,1e-4])
+        "num_workers": 3,
+        "critic_lr": tune.grid_search([1e-2,1e-3,1e-4])
     }
 )
 print(analysis.get_best_config(metric="episode_reward_mean"))

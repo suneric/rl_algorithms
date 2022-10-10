@@ -53,8 +53,8 @@ class DDPG:
         """
         with tf.GradientTape() as tape:
             target_act = self.ac_target.pi(nobs)
-            target_q = self.ac_target.q([nobs,target_act])
-            q = self.ac.q([obs, act])
+            target_q = self.ac_target.q(nobs,target_act)
+            q = self.ac.q(obs, act)
             y = rew + self.gamma * (1-done) * target_q
             q_loss = tf.keras.losses.MSE(y, q)
         q_grad = tape.gradient(q_loss, self.ac.q.trainable_variables)
@@ -67,7 +67,7 @@ class DDPG:
         to solve max(E [Q(s, u(s))])
         """
         with tf.GradientTape() as tape:
-            q = self.ac.q([obs, self.ac.pi(obs)])
+            q = self.ac.q(obs, self.ac.pi(obs))
             pi_loss = -tf.math.reduce_mean(q)
         pi_grad = tape.gradient(pi_loss, self.ac.pi.trainable_variables)
         self.pi_optimizer.apply_gradients(zip(pi_grad, self.ac.pi.trainable_variables))

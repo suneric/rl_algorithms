@@ -58,8 +58,8 @@ class TD3:
         """
         if self.learn_iter % self.pi_learn_interval == 0:
             with tf.GradientTape() as tape:
-                q = self.ac.tq.Q1(obs, self.ac.pi(obs))
-                pi_loss = -tf.math.reduce_mean(q)
+                q1, q2 = self.ac.tq(obs, self.ac.pi(obs))
+                pi_loss = -tf.math.reduce_mean(tf.minimum(q1,q2))
             pi_grad = tape.gradient(pi_loss, self.ac.pi.trainable_variables)
             self.pi_optimizer.apply_gradients(zip(pi_grad, self.ac.pi.trainable_variables))
             # update target network with same parameters
