@@ -22,8 +22,8 @@ class TD3:
 
     def policy(self, obs):
         state = tf.expand_dims(tf.convert_to_tensor(obs),0)
-        sampled_acts = tf.squeeze(self.ac.act(state)) + self.noise_obj()
-        return tf.clip_by_value(sampled_acts, -self.act_limit, self.act_limit)
+        sampled_acts = tf.squeeze(self.ac.act(state)).numpy() + self.noise_obj()
+        return np.clip(sampled_acts, -self.act_limit, self.act_limit)
 
     def learn(self, buffer):
         sampled_batch = buffer.sample()

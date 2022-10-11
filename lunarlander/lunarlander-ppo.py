@@ -21,10 +21,10 @@ for device in gpu_devices:
 np.random.seed(123)
 
 if __name__ == '__main__':
-    env = gym.make("LunarLander-v2", continuous = False, render_mode='human')
+    env = gym.make("LunarLander-v2", continuous=False, render_mode='human')
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.n
-    print("state {}, action {}".format(obs_dim,act_dim))
+    print("state {}, action {}".format(obs_dim, act_dim))
 
     hidden_sizes = [256,256,64]
     clip_ratio = 0.2
@@ -32,46 +32,39 @@ if __name__ == '__main__':
     critic_lr = 2e-4
     target_kl = 0.01
     agent = PPO(obs_dim, act_dim, hidden_sizes, clip_ratio, actor_lr, critic_lr, target_kl)
-    buffer = ReplayBuffer_P(obs_dim,act_dim,capacity=10000,gamma=0.99,lamda=0.97)
+
+    total_epochs = 100
+    steps_per_epoch = 4000
+    buffer = ReplayBuffer_P(obs_dim,act_dim,capacity=steps_per_epoch,gamma=0.99,lamda=0.97)
 
     logDir = 'logs/ppo' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     summaryWriter = tf.summary.create_file_writer(logDir)
 
-    total_episodes = 1000
-    t, max_step, update_steps = 0, 500, 3000
-    ep_ret_list, avg_ret_list = [], []
-    for ep in range(total_episodes):
-        ep_ret, ep_step = 0, 0
-        done = False
-        state = env.reset()
-        o = state[0]
-        while not done and ep_step < max_step:
+    state = env.reset()
+    o = state[0]
+    ep_ret, ep_len = 0, 0
+    for epoch in range(total_epochs):
+        sum_ret, sum_len, num_episodes = 0, 0, 0
+        for t in range(steps_per_epoch):
             a, logp, value = agent.policy(o)
             state = env.step(tf.squeeze(a).numpy())
             o2,r,done = state[0],state[1],state[2]
             buffer.store(o,a,r,value,logp)
-            t += 1
-            ep_step += 1
+            ep_len += 1
             ep_ret += r
             o = o2
+            if done or (t == steps_per_epoch - 1):
+                last_value = 0 if done else agent.value(o)
+                buffer.finish_trajectory(last_value)
+                sum_ret += ep_ret
+                sum_len += ep_len
+                num_episodes += 1
+                state = env.reset()
+                o = state[0]
+                ep_ret, ep_len = 0, 0
 
-        last_value = 0 if done else agent.value(o)
-        buffer.finish_trajectory(last_value) # finish trajectory if reached to a terminal state
-
-        if buffer.ptr > update_steps:
-            agent.learn(buffer)
-
-        with summaryWriter.as_default():
-            tf.summary.scalar('episode reward', ep_ret, step=ep)
-
-        ep_ret_list.append(ep_ret)
-        avg_ret = np.mean(ep_ret_list[-40:])
-        avg_ret_list.append(avg_ret)
-        print("Episode *{}* average reward is {}, total steps {}".format(ep, avg_ret, t))
+        agent.learn(buffer)
+        print("Epoch {}, Mean Return {:.4f}, Mean Length {:.4f}".format(
+            epoch+1, sum_ret/num_episodes, sum_len/num_episodes))
 
     env.close()
-
-    plt.plot(avg_ret_list)
-    plt.xlabel('Episode')
-    plt.ylabel('Avg. Episodic Reward')
-    plt.show()

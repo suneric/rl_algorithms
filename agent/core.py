@@ -74,7 +74,7 @@ class Critic(tf.keras.Model):
         x = layers.Concatenate()([obs_input, act_input])
         for i in range(0, len(hidden_sizes)):
             x = layers.Dense(hidden_sizes[i], activation=activation)(x)
-        output = layers.Dense(1, activation='relu')(x)
+        output = layers.Dense(1)(x)
         model = tf.keras.Model([obs_input,act_input], output)
         return model
 

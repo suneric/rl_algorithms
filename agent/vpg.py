@@ -23,10 +23,8 @@ bad loop and is not always able to recover.
 """
 class VPG:
     def __init__(self,obs_dim,act_dim,hidden_sizes,pi_lr,q_lr,target_kl):
-        self.actor = mlp_model(obs_dim,act_dim,hidden_sizes,'relu',None)
-        self.critic = mlp_model(obs_dim,1,hidden_sizes,'relu',None)
-        print(self.actor.summary())
-        print(self.critic.summary())
+        self.pi = mlp_model(obs_dim,act_dim,hidden_sizes,'relu','tanh')
+        self.q = mlp_model(obs_dim,1,hidden_sizes,'relu','tanh')
         self.pi_optimizer = tf.keras.optimizers.Adam(pi_lr)
         self.q_optimizer = tf.keras.optimizers.Adam(q_lr)
         self.target_kl = target_kl
@@ -34,15 +32,15 @@ class VPG:
 
     def policy(self, obs):
         state = tf.expand_dims(tf.convert_to_tensor(obs), 0)
-        logits = self.actor(state)
+        logits = self.pi(state)
         action = tf.squeeze(tf.random.categorical(logits,1), axis=1)
         logprob = self.logprobabilities(logits, action)
-        value = self.critic(state)
+        value = self.q(state)
         return action, logprob, value
 
     def value(self, obs):
         state = tf.expand_dims(tf.convert_to_tensor(obs), 0)
-        return self.critic(state)
+        return self.q(state)
 
     def logprobabilities(self, logits, action):
         """
@@ -68,16 +66,16 @@ class VPG:
 
     def update_pi(self, obs, act, logp, adv):
         with tf.GradientTape() as tape:
-            logp_new = self.logprobabilities(self.actor(obs),act)
+            logp_new = self.logprobabilities(self.pi(obs),act)
             loss = -tf.reduce_mean(logp_new*adv)
-        grads = tape.gradient(loss, self.actor.trainable_variables)
-        self.pi_optimizer.apply_gradients(zip(grads, self.actor.trainable_variables))
-        kl = tf.reduce_mean(logp - self.logprobabilities(self.actor(obs),act))
-        ent = tf.reduce_mean(-self.logprobabilities(self.actor(obs),act))
+        grads = tape.gradient(loss, self.pi.trainable_variables)
+        self.pi_optimizer.apply_gradients(zip(grads, self.pi.trainable_variables))
+        kl = tf.reduce_mean(logp - self.logprobabilities(self.pi(obs),act))
+        ent = tf.reduce_mean(-self.logprobabilities(self.pi(obs),act))
         return tf.reduce_sum(kl), tf.reduce_sum(ent)
 
     def update_q(self, obs, ret):
         with tf.GradientTape() as tape:
-            loss = tf.keras.losses.MSE(ret, self.critic(obs))
-        grads = tape.gradient(loss, self.critic.trainable_variables)
-        self.q_optimizer.apply_gradients(zip(grads, self.critic.trainable_variables))
+            loss = tf.keras.losses.MSE(ret, self.q(obs))
+        grads = tape.gradient(loss, self.q.trainable_variables)
+        self.q_optimizer.apply_gradients(zip(grads, self.q.trainable_variables))

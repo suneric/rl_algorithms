@@ -32,7 +32,7 @@ class DDPG:
 
     def policy(self, obs):
         state = tf.expand_dims(tf.convert_to_tensor(obs),0)
-        sampled_acts = tf.squeeze(self.ac.act(state)) + self.noise_obj()
+        sampled_acts = tf.squeeze(self.ac.act(state)).numpy() + self.noise_obj()
         return np.clip(sampled_acts, -self.act_limit, self.act_limit)
 
     def learn(self, buffer):
@@ -54,8 +54,8 @@ class DDPG:
         with tf.GradientTape() as tape:
             target_act = self.ac_target.pi(nobs)
             target_q = self.ac_target.q(nobs,target_act)
-            q = self.ac.q(obs, act)
             y = rew + self.gamma * (1-done) * target_q
+            q = self.ac.q(obs, act)
             q_loss = tf.keras.losses.MSE(y, q)
         q_grad = tape.gradient(q_loss, self.ac.q.trainable_variables)
         self.q_optimizer.apply_gradients(zip(q_grad, self.ac.q.trainable_variables))

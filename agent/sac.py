@@ -25,7 +25,7 @@ class SAC:
     def policy(self, obs):
         state = tf.expand_dims(tf.convert_to_tensor(obs),0)
         action, logprob = self.pi(state)
-        return tf.clip_by_value(tf.squeeze(action), -self.act_limit, self.act_limit)
+        return np.clip(tf.squeeze(action).numpy(), -self.act_limit, self.act_limit)
 
     def learn(self, buffer):
         sampled_batch = buffer.sample()

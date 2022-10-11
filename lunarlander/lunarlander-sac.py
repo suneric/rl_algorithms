@@ -36,21 +36,21 @@ if __name__ == '__main__':
     act_limit = env.action_space.high[0]
     print("state {}, action {}, limit {}".format(obs_dim,act_dim,act_limit))
 
-    buffer = ReplayBuffer_Q(obs_dim,act_dim,capacity=500000,batch_size=64)
+    buffer = ReplayBuffer_Q(obs_dim,act_dim,capacity=50000,batch_size=64)
 
     hidden_sizes = [256,256,64]
     gamma = 0.99
     polyak = 0.995
-    pi_lr = 1e-4
-    q_lr = 2e-4
+    pi_lr = 3e-4
+    q_lr = 1e-3
     temp = 0.3
     agent = SAC(obs_dim,act_dim,hidden_sizes,act_limit,gamma,polyak,pi_lr,q_lr,temp)
 
     logDir = 'logs/sac' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     summaryWriter = tf.summary.create_file_writer(logDir)
 
-    total_episodes = 1000
-    t, start_steps, ep_max_step = 0, 10000, 500
+    total_episodes, ep_max_step = 1000, 500
+    t, start_steps = 0, 1e4
     ep_ret_list, avg_ret_list = [], []
     for ep in range(total_episodes):
         ep_ret, ep_step = 0, 0

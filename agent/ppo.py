@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
-from .core import *
+from .core import mlp_model
 
 """
 PPO with tensorflow implementation
@@ -38,11 +38,9 @@ references:
 [3] https://github.com/suneric/door_open_rl/blob/main/do_learning/scripts/agents/ppo_mixed.py
 """
 class PPO:
-    def __init__(self, obs_dim, act_dim, hidden_sizes, clip_ratio, actor_lr, critic_lr, target_kl):
-        self.actor = mlp_model(obs_dim, act_dim, hidden_sizes, 'relu', None)
-        self.critic = mlp_model(obs_dim,1,hidden_sizes,'relu', None)
-        print(self.actor.summary())
-        print(self.critic.summary())
+    def __init__(self,obs_dim,act_dim,hidden_sizes,clip_ratio,actor_lr,critic_lr,target_kl):
+        self.pi = mlp_model(obs_dim,act_dim,hidden_sizes,'relu','tanh')
+        self.q = mlp_model(obs_dim,1,hidden_sizes,'relu','tanh')
         self.pi_optimizer = tf.keras.optimizers.Adam(actor_lr)
         self.q_optimizer = tf.keras.optimizers.Adam(critic_lr)
         self.clip_r = clip_ratio
@@ -51,15 +49,15 @@ class PPO:
 
     def policy(self, obs):
         state = tf.expand_dims(tf.convert_to_tensor(obs), 0)
-        logits = self.actor(state)
+        logits = self.pi(state)
         action = tf.squeeze(tf.random.categorical(logits,1), axis=1)
         logprob = self.logprobabilities(logits, action)
-        value = self.critic(state)
+        value = tf.squeeze(self.q(state))
         return action, logprob, value
 
     def value(self, obs):
         state = tf.expand_dims(tf.convert_to_tensor(obs), 0)
-        return self.critic(state)
+        return tf.squeeze(self.q(state))
 
     def logprobabilities(self, logits, action):
         """
@@ -85,16 +83,16 @@ class PPO:
 
     def update_pi(self, obs, act, logp, adv):
         with tf.GradientTape() as tape:
-            ratio = tf.exp(self.logprobabilities(self.actor(obs),act) - logp)
+            ratio = tf.exp(self.logprobabilities(self.pi(obs), act) - logp)
             min_adv = tf.where(adv > 0, (1+self.clip_r)*adv, (1-self.clip_r)*adv)
             loss = -tf.reduce_mean(tf.minimum(ratio*adv, min_adv))
-        grads = tape.gradient(loss, self.actor.trainable_variables)
-        self.pi_optimizer.apply_gradients(zip(grads, self.actor.trainable_variables))
-        kl = tf.reduce_mean(logp - self.logprobabilities(self.actor(obs), act))
+        grads = tape.gradient(loss, self.pi.trainable_variables)
+        self.pi_optimizer.apply_gradients(zip(grads, self.pi.trainable_variables))
+        kl = tf.reduce_mean(logp - self.logprobabilities(self.pi(obs), act))
         return tf.reduce_sum(kl)
 
     def update_q(self, obs, ret):
         with tf.GradientTape() as tape:
-            loss = tf.keras.losses.MSE(ret, self.critic(obs))
-        grads = tape.gradient(loss, self.critic.trainable_variables)
-        self.q_optimizer.apply_gradients(zip(grads, self.critic.trainable_variables))
+            loss = tf.keras.losses.MSE(ret, self.q(obs))
+        grads = tape.gradient(loss, self.q.trainable_variables)
+        self.q_optimizer.apply_gradients(zip(grads, self.q.trainable_variables))
