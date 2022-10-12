@@ -36,7 +36,7 @@ The episode finishes if:
 
 
 ### Arguments
-To use the "continuous" enviroment, you need to specify the 'continuous=True'
+To use the "continuous" environment, you need to specify the 'continuous=True'
 ```python
    import gym
    env = gym.make(

@@ -7,8 +7,7 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import os
 import datetime
-from agent.core import ReplayBuffer_Q
-from agent.dqn import DQN
+from agent.dqn import DQN, ReplayBuffer
 
 """
 https://www.tensorflow.org/guide/gpu#limiting_gpu_memory_growth
@@ -19,6 +18,7 @@ for device in gpu_devices:
     tf.config.experimental.set_memory_growth(device, True)
 
 np.random.seed(123)
+tf.random.set_seed(123)
 
 if __name__ == '__main__':
     env = gym.make("LunarLander-v2", continuous = False, render_mode='human')
@@ -26,7 +26,7 @@ if __name__ == '__main__':
     act_dim = env.action_space.n
     print("state {}, action {}".format(obs_dim,act_dim))
 
-    buffer = ReplayBuffer_Q(obs_dim,act_dim,capacity=100000,batch_size=128,continuous=False)
+    buffer = ReplayBuffer(obs_dim,act_dim,capacity=100000,batch_size=64)
     hidden_sizes = [256,256,64]
     gamma = 0.99
     lr = 2e-4
@@ -40,18 +40,17 @@ if __name__ == '__main__':
     ep_ret_list, avg_ret_list = [], []
     for ep in range(total_episodes):
         epsilon = max(epsilon_stop, epsilon*decay)
-        ep_ret, ep_step = 0, 0
-        done = False
+        done, ep_ret, ep_step = False, 0, 0
         state = env.reset()
-        o = state[0]
         while not done and ep_step < ep_max_step:
-            a = agent.policy(o,epsilon)
-            state = env.step(a)
-            o2,r,done = state[0],state[1],state[2]
-            buffer.store(o,a,r,o2,done)
+            a = agent.policy(state[0], epsilon)
+            new_state = env.step(a)
+            r, done = new_state[1], new_state[2]
+            buffer.store(state[0],a,r,new_state[0],done)
             ep_step += 1
             ep_ret += r
-            o = o2
+            state = new_state
+            
             agent.learn(buffer)
 
         with summaryWriter.as_default():

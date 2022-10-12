@@ -7,8 +7,8 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import datetime
 import os
-from agent.core import ReplayBuffer_Q, OUNoise, GSNoise
-from agent.ddpg import DDPG
+from agent.core import GSNoise, OUNoise
+from agent.ddpg import DDPG, ReplayBuffer
 
 """
 https://www.tensorflow.org/guide/gpu#limiting_gpu_memory_growth
@@ -19,6 +19,7 @@ for device in gpu_devices:
     tf.config.experimental.set_memory_growth(device, True)
 
 np.random.seed(123)
+tf.random.set_seed(123)
 
 if __name__ == '__main__':
     env = gym.make(
@@ -36,9 +37,9 @@ if __name__ == '__main__':
     act_limit = env.action_space.high[0]
     print("state {}, action {}, limit {}".format(obs_dim,act_dim,act_limit))
 
-    buffer = ReplayBuffer_Q(obs_dim,act_dim,capacity=100000,batch_size=128)
-    noise = GSNoise(mean=0,std_dev=0.2,size=act_dim)
-    #noise = OUNoise(x=np.zeros(act_dim),mean=0,std_dev=0.2,theta=0.15,dt=0.01)
+    buffer = ReplayBuffer(obs_dim,act_dim,capacity=100000,batch_size=64)
+    noise = GSNoise(mu=np.zeros(act_dim),sigma=float(0.2)*np.ones(act_dim))
+    #noise = OUNoise(mu=np.zeros(act_dim),sigma=float(0.2)*np.ones(act_dim))
     hidden_sizes = [256,256,64]
     gamma = 0.99
     polyak = 0.995
@@ -53,22 +54,20 @@ if __name__ == '__main__':
     t, start_steps = 0, 1e4
     ep_ret_list, avg_ret_list = [], []
     for ep in range(total_episodes):
-        ep_ret, ep_step = 0, 0
-        done = False
+        done, ep_ret, ep_step = False, 0, 0
         state = env.reset()
-        o = state[0]
         while not done and ep_step < ep_max_step:
-            if t > start_steps:
-                a = agent.policy(o)
+            if t > start_steps: # trick for improving exploration
+                a = agent.policy(state[0])
             else:
                 a = env.action_space.sample()
-            state = env.step(a)
-            o2,r,done = state[0],state[1],state[2]
-            buffer.store(o,a,r,o2,done)
+            new_state = env.step(a)
+            r, done = new_state[1], new_state[2]
+            buffer.store(state[0],a,r,new_state[0],done)
             t += 1
             ep_step += 1
             ep_ret += r
-            o = o2
+            state = new_state
 
             agent.learn(buffer)
 
