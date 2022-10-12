@@ -113,7 +113,7 @@ class PPO:
         value = tf.squeeze(self.q(state))
         return action, logprob, value
 
-    def learn(self, buffer, actor_iter=80, critic_iter=80):
+    def learn(self, buffer, actor_iter=120, critic_iter=120):
         data = buffer.get()
         obs_buf = data['obs']
         act_buf = data['act']

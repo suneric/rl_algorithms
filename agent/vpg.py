@@ -102,7 +102,7 @@ class VPG:
         value = self.q(state)
         return action, logprob, value
 
-    def learn(self, buffer, critic_iter=80):
+    def learn(self, buffer, critic_iter=120):
         data = buffer.get()
         obs_buf = data['obs']
         act_buf = data['act']

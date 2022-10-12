@@ -161,6 +161,25 @@ A central feature of SAC is **entropy regularization**. The policy is trained to
 
 [SAC (Soft Actor-Critic): Haarnoja et al, 2018](https://arxiv.org/abs/1801.01290)
 
+
+## Performance Comparison
+
+Environment: LunarLander-v2, continuous and discrete action space
+Configuration:
+- hidden layers: [256, 256, 256]
+- discount: $\gamma$ = 0.99
+- policy $\pi$ learning rate = 1e-4
+- Q-function learning rate = 2e-4
+- polyak = 0.995 (or $\tau$ = 0.005)
+- buffer capacity: 100000
+- batch size: 64
+- target_kl: 0.01
+-
+
+<p align="center">
+<img src="https://github.com/suneric/rl_algorithms/blob/main/references/training_performance.png" width=80% height=80%>
+</p>
+
 ## References
 - [Open AI Spinning up, Introduction to RL](https://spinningup.openai.com/en/latest/spinningup/rl_intro2.html)
 - [Tensorflow, Introduction to RL and Deep Q Networks](https://www.tensorflow.org/agents/tutorials/0_intro_rl)

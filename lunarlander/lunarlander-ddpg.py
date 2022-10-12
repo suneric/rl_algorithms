@@ -38,8 +38,8 @@ if __name__ == '__main__':
     print("state {}, action {}, limit {}".format(obs_dim,act_dim,act_limit))
 
     buffer = ReplayBuffer(obs_dim,act_dim,capacity=100000,batch_size=64)
-    noise = GSNoise(mu=np.zeros(act_dim),sigma=float(0.2)*np.ones(act_dim))
-    #noise = OUNoise(mu=np.zeros(act_dim),sigma=float(0.2)*np.ones(act_dim))
+    #noise = GSNoise(mu=np.zeros(act_dim),sigma=float(0.2)*np.ones(act_dim))
+    noise = OUNoise(mu=np.zeros(act_dim),sigma=float(0.2)*np.ones(act_dim))
     hidden_sizes = [256,256,256]
     gamma = 0.99
     polyak = 0.995

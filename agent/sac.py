@@ -89,23 +89,26 @@ class SAC:
     which can accelerate learning later on. It can also prevent the policy from prematurely converging
     to a bad local optimum.
     """
-    def __init__(self,obs_dim,act_dim,hidden_sizes,act_limit,gamma,polyak,pi_lr,q_lr,temp):
+    def __init__(self,obs_dim,act_dim,hidden_sizes,act_limit,gamma,polyak,pi_lr,q_lr,alpha_lr,temp):
         self.pi = gaussian_actor_model(obs_dim,act_dim,hidden_sizes,'relu')
         self.q = twin_critic_model(obs_dim,act_dim,hidden_sizes,'relu')
         self.q_target = deepcopy(self.q)
         self.pi_optimizer = tf.keras.optimizers.Adam(pi_lr)
         self.q_optimizer = tf.keras.optimizers.Adam(q_lr)
+        self.log_alpha = tf.Variable(0.0, dtype=tf.float32)
+        self.alpha = tfp.util.DeferredTensor(self.log_alpha, tf.exp)
+        self.log_alpha_optimizer = tf.keras.optimizers.Adam(alpha_lr)
         self.gamma = gamma
         self.polyak = polyak
         self.act_limit = act_limit
-        self.temperature = temp
-        self.pi_learn_interval = 2
+        self.target_entropy = -act_dim
+        self.target_update_interval = 1
         self.learn_iter = 0
 
     def policy(self, obs):
         state = tf.expand_dims(tf.convert_to_tensor(obs),0)
-        mu,logstd = self.pi(state)
-        act, logp = self.sample_action(mu,logstd)
+        mu, logstd = self.pi(state)
+        act, logp = self.sample_action(mu, logstd)
         legal_act = np.clip(tf.squeeze(act).numpy(), -self.act_limit, self.act_limit)
         return legal_act
 
@@ -114,6 +117,9 @@ class SAC:
         action = tf.tanh(tf.stop_gradient(dist.sample()))
         logp = tf.reduce_sum(dist.log_prob(action), axis=-1)
         return action, logp
+
+    def alpha(self):
+        return tf.math.exp(self.log_alpha)
 
     def learn(self, buffer):
         sampled_batch = buffer.sample()
@@ -126,32 +132,45 @@ class SAC:
 
     def update(self, obs, act, rew, nobs, done):
         self.learn_iter += 1
+        entropy_scale = tf.convert_to_tensor(self.alpha)
         """
-        Like TD3, learn two Q-function and use the smaller one of two Q values
+        update Q-function,  Like TD3, learn two Q-function and use the smaller one of two Q values
         """
         with tf.GradientTape() as tape:
             """
             Unlike TD3, use current policy to get next action
             """
             mu, logstd = self.pi(nobs, training=True)
-            nact, nact_logp = self.sample_action(mu, logstd)
+            nact, logp = self.sample_action(mu, logstd)
             target_q1, target_q2 = self.q_target([nobs, nact], training=True)
-            target_q = tf.minimum(target_q1, target_q2) - self.temperature * nact_logp
+            target_q = tf.minimum(target_q1,target_q2)-entropy_scale*logp
             actual_q = rew + (1-done) * self.gamma * target_q
             pred_q1, pred_q2 = self.q([obs, act], training=True)
             q_loss = tf.keras.losses.MSE(actual_q, pred_q1) + tf.keras.losses.MSE(actual_q, pred_q2)
         q_grad = tape.gradient(q_loss, self.q.trainable_variables)
         self.q_optimizer.apply_gradients(zip(q_grad, self.q.trainable_variables))
         """
-        update policy and target network less frequently than Q-function
+        update policy
         """
-        if self.learn_iter % self.pi_learn_interval == 0:
-            with tf.GradientTape() as tape:
-                mu, logstd = self.pi(obs, training=True)
-                action, logp = self.sample_action(mu,logstd)
-                q1, q2 = self.q([obs, action], training=True)
-                pi_loss = tf.math.reduce_mean(self.temperature*logp - tf.minimum(q1,q2))
-            pi_grad = tape.gradient(pi_loss, self.pi.trainable_variables)
-            self.pi_optimizer.apply_gradients(zip(pi_grad, self.pi.trainable_variables))
-            # update target Q network with same parameters
+        with tf.GradientTape() as tape:
+            mu,ls = self.pi(obs, training=True)
+            action, logp = self.sample_action(mu,ls)
+            q1, q2 = self.q([obs, action], training=True)
+            pi_loss = tf.math.reduce_mean(entropy_scale*logp-tf.minimum(q1,q2))
+        pi_grad = tape.gradient(pi_loss, self.pi.trainable_variables)
+        self.pi_optimizer.apply_gradients(zip(pi_grad, self.pi.trainable_variables))
+        """
+        update alpha
+        """
+        mu,ls = self.pi(obs, training=True)
+        action, logp = self.sample_action(mu,ls)
+        with tf.GradientTape() as tape:
+            alpha_losses = -1.0*(self.alpha*tf.stop_gradient(logp+self.target_entropy))
+            alpha_loss = tf.nn.compute_average_loss(alpha_losses)
+        alpha_grad = tape.gradient(alpha_loss, [self.log_alpha])
+        self.log_alpha_optimizer.apply_gradients(zip(alpha_grad, [self.log_alpha]))
+        """
+        update target network
+        """
+        if self.learn_iter % self.target_update_interval == 0:
             copy_network_variables(self.q_target.variables, self.q.variables, self.polyak)

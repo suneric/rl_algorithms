@@ -43,8 +43,9 @@ if __name__ == '__main__':
     polyak = 0.995
     pi_lr = 1e-4
     q_lr = 2e-4
-    temp = 0.3
-    agent = SAC(obs_dim,act_dim,hidden_sizes,act_limit,gamma,polyak,pi_lr,q_lr,temp)
+    alpha_lr = 1e-4
+    temp = 0.1
+    agent = SAC(obs_dim,act_dim,hidden_sizes,act_limit,gamma,polyak,pi_lr,q_lr,alpha_lr,temp)
 
     logDir = 'logs/sac' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     summaryWriter = tf.summary.create_file_writer(logDir)

@@ -33,13 +33,13 @@ if __name__ == '__main__':
     agent = VPG(obs_dim, act_dim, hidden_sizes, actor_lr, critic_lr, target_kl)
 
     total_epochs = 100
-    steps_per_epoch = 4000
+    steps_per_epoch = 5000
     buffer = ReplayBuffer(obs_dim,act_dim,capacity=steps_per_epoch,gamma=0.99,lamda=0.97)
 
     logDir = 'logs/vpg' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     summaryWriter = tf.summary.create_file_writer(logDir)
 
-    ep_ret, ep_len = 0, 0
+    ep, ep_ret, ep_len = 0, 0, 0
     state = env.reset()
     for epoch in range(total_epochs):
         sum_ret, sum_len, num_episodes = 0, 0, 0
@@ -52,6 +52,10 @@ if __name__ == '__main__':
             ep_ret += r
             state = new_state
             if done or (t == steps_per_epoch - 1):
+                with summaryWriter.as_default():
+                    tf.summary.scalar('episode reward', ep_ret, step=ep)
+                ep += 1
+
                 last_value = 0
                 if not done:
                     last_value = tf.squeeze(agent.q(tf.expand_dims(tf.convert_to_tensor(state[0]), 0)))
