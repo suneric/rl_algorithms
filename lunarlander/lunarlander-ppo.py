@@ -26,7 +26,7 @@ if __name__ == '__main__':
     act_dim = env.action_space.n
     print("state {}, action {}".format(obs_dim, act_dim))
 
-    hidden_sizes = [256,256,64]
+    hidden_sizes = [256,256,256]
     clip_ratio = 0.2
     actor_lr = 1e-4
     critic_lr = 2e-4

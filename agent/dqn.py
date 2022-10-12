@@ -112,7 +112,6 @@ class DQN:
         done_batch = sampled_batch['done']
         self.update(obs_batch, act_batch, rew_batch, nobs_batch, done_batch)
 
-    @tf.function
     def update(self, obs, act, rew, nobs, done):
         self.learn_iter += 1
         """

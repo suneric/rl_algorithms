@@ -26,7 +26,7 @@ if __name__ == '__main__':
     act_dim = env.action_space.n
     print("state {}, action {}".format(obs_dim, act_dim))
 
-    hidden_sizes = [256,256,64]
+    hidden_sizes = [256,256,256]
     actor_lr = 1e-4
     critic_lr = 2e-4
     target_kl = 0.01
@@ -36,7 +36,7 @@ if __name__ == '__main__':
     steps_per_epoch = 4000
     buffer = ReplayBuffer(obs_dim,act_dim,capacity=steps_per_epoch,gamma=0.99,lamda=0.97)
 
-    logDir = 'logs/ppo' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    logDir = 'logs/vpg' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     summaryWriter = tf.summary.create_file_writer(logDir)
 
     ep_ret, ep_len = 0, 0

@@ -27,16 +27,16 @@ if __name__ == '__main__':
     print("state {}, action {}".format(obs_dim,act_dim))
 
     buffer = ReplayBuffer(obs_dim,act_dim,capacity=100000,batch_size=64)
-    hidden_sizes = [256,256,64]
+    hidden_sizes = [256,256,256]
     gamma = 0.99
     lr = 2e-4
-    agent = DQN(obs_dim,act_dim,hidden_sizes,gamma,lr,update_stable_freq=300)
+    agent = DQN(obs_dim,act_dim,hidden_sizes,gamma,lr,update_stable_freq=1000)
 
     logDir = 'logs/dqn' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     summaryWriter = tf.summary.create_file_writer(logDir)
 
     total_episodes, ep_max_step = 1000, 500
-    epsilon, epsilon_stop, decay = 0.99, 0.1, 0.995
+    epsilon, epsilon_stop, decay = 0.99, 0.1, 0.99
     ep_ret_list, avg_ret_list = [], []
     for ep in range(total_episodes):
         epsilon = max(epsilon_stop, epsilon*decay)
@@ -50,7 +50,7 @@ if __name__ == '__main__':
             ep_step += 1
             ep_ret += r
             state = new_state
-            
+
             agent.learn(buffer)
 
         with summaryWriter.as_default():

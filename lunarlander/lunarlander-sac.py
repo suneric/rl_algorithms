@@ -38,7 +38,7 @@ if __name__ == '__main__':
 
     buffer = ReplayBuffer(obs_dim,act_dim,capacity=100000,batch_size=64)
 
-    hidden_sizes = [256,256,64]
+    hidden_sizes = [256,256,256]
     gamma = 0.99
     polyak = 0.995
     pi_lr = 1e-4

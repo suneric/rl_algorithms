@@ -3,7 +3,6 @@ import tensorflow as tf
 from tensorflow.keras import layers
 import scipy.signal
 
-@tf.function
 def copy_network_variables(target_weights, from_weights, polyak = 0.0):
     """
     copy network variables with consider a polyak

@@ -36,7 +36,7 @@ if __name__ == '__main__':
     summaryWriter = tf.summary.create_file_writer(logDir)
 
     total_episodes, ep_max_step = 1000, 500
-    epsilon, epsilon_stop, decay = 0.99, 0.1, 0.995
+    epsilon, epsilon_stop, decay = 0.99, 0.1, 0.99
     ep_ret_list, avg_ret_list = [], []
     for ep in range(total_episodes):
         epsilon = max(epsilon_stop, epsilon*decay)

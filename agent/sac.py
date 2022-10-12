@@ -133,12 +133,12 @@ class SAC:
             """
             Unlike TD3, use current policy to get next action
             """
-            mu, logstd = self.pi(nobs)
+            mu, logstd = self.pi(nobs, training=True)
             nact, nact_logp = self.sample_action(mu, logstd)
-            target_q1, target_q2 = self.q_target([nobs, nact])
+            target_q1, target_q2 = self.q_target([nobs, nact], training=True)
             target_q = tf.minimum(target_q1, target_q2) - self.temperature * nact_logp
             actual_q = rew + (1-done) * self.gamma * target_q
-            pred_q1, pred_q2 = self.q([obs, act])
+            pred_q1, pred_q2 = self.q([obs, act], training=True)
             q_loss = tf.keras.losses.MSE(actual_q, pred_q1) + tf.keras.losses.MSE(actual_q, pred_q2)
         q_grad = tape.gradient(q_loss, self.q.trainable_variables)
         self.q_optimizer.apply_gradients(zip(q_grad, self.q.trainable_variables))
@@ -147,11 +147,10 @@ class SAC:
         """
         if self.learn_iter % self.pi_learn_interval == 0:
             with tf.GradientTape() as tape:
-                mu, logstd = self.pi(obs)
+                mu, logstd = self.pi(obs, training=True)
                 action, logp = self.sample_action(mu,logstd)
-                q1, q2 = self.q([obs, action])
-                adv = tf.stop_gradient(logp - tf.minimum(q1,q2))
-                pi_loss = -tf.math.reduce_mean(logp*adv)
+                q1, q2 = self.q([obs, action], training=True)
+                pi_loss = tf.math.reduce_mean(self.temperature*logp - tf.minimum(q1,q2))
             pi_grad = tape.gradient(pi_loss, self.pi.trainable_variables)
             self.pi_optimizer.apply_gradients(zip(pi_grad, self.pi.trainable_variables))
             # update target Q network with same parameters
