@@ -11,8 +11,7 @@ def mlp_model(input_dim, output_dim, hidden_sizes, activation, output_activation
     x = layers.Dense(hidden_sizes[0], activation=activation)(input)
     for i in range(1, len(hidden_sizes)):
         x = layers.Dense(hidden_sizes[i], activation=activation)(x)
-    initializer = tf.keras.initializers.RandomUniform(minval=-0.003, maxval=0.003)
-    output = layers.Dense(output_dim, activation=output_activation, kernel_initializer=initializer)(x)
+    output = layers.Dense(output_dim, activation=output_activation)(x)
     return tf.keras.Model(input, output)
 
 class ReplayBuffer:
@@ -22,21 +21,22 @@ class ReplayBuffer:
     """
     def __init__(self, obs_dim, act_dim, capacity, gamma=0.99, lamda=0.95):
         self.obs_buf = np.zeros((capacity, obs_dim), dtype=np.float32)
-        self.act_buf = np.zeros(capacity, dtype=np.int32)
+        self.act_buf = np.zeros((capacity, act_dim), dtype=np.float32) # one hot action list
+        self.prob_buf = np.zeros((capacity, act_dim), dtype=np.float32)
         self.rew_buf = np.zeros(capacity, dtype=np.float32)
         self.ret_buf = np.zeros(capacity, dtype=np.float32)
         self.val_buf = np.zeros(capacity, dtype=np.float32)
         self.adv_buf = np.zeros(capacity, dtype=np.float32)
-        self.logprob_buf = np.zeros(capacity, dtype=np.float32)
+
         self.gamma, self.lamda = gamma, lamda
         self.ptr, self.traj_idx = 0, 0
 
-    def store(self, obs, act, rew, value, logprob):
+    def store(self, obs, act, rew, val, prob):
         self.obs_buf[self.ptr]=obs
         self.act_buf[self.ptr]=act
         self.rew_buf[self.ptr]=rew
-        self.val_buf[self.ptr]=value
-        self.logprob_buf[self.ptr]=logprob
+        self.val_buf[self.ptr]=val
+        self.prob_buf[self.ptr]=prob
         self.ptr += 1
 
     def finish_trajectory(self, last_value = 0):
@@ -55,16 +55,18 @@ class ReplayBuffer:
         """
         Get all data of the buffer and normalize the advantages
         """
-        self.ptr, self.traj_idx = 0, 0
-        adv_mean, adv_std = np.mean(self.adv_buf), np.std(self.adv_buf)
-        self.adv_buf = (self.adv_buf-adv_mean) / adv_std
-        return dict(
-            obs=self.obs_buf,
-            act=self.act_buf,
-            adv=self.adv_buf,
-            ret=self.ret_buf,
-            logp=self.logprob_buf,
+        s = slice(0,self.ptr)
+        advs = self.adv_buf[s]
+        normalized_advs = (advs-np.mean(advs)) / (np.std(advs)+1e-10)
+        data = dict(
+            obs=self.obs_buf[s],
+            act=self.act_buf[s],
+            ret=self.ret_buf[s],
+            prob=self.prob_buf[s],
+            adv=normalized_advs,
             )
+        self.ptr, self.traj_idx = 0, 0
+        return data
 
 class PPO:
     """
@@ -96,49 +98,68 @@ class PPO:
     via some gradient descent algorithm. This procedure is applied for many epochs until
     the environment is solved.
     """
-    def __init__(self,obs_dim,act_dim,hidden_sizes,clip_ratio,actor_lr,critic_lr,target_kl):
-        self.pi = mlp_model(obs_dim,act_dim,hidden_sizes,'relu','tanh')
-        self.q = mlp_model(obs_dim,1,hidden_sizes,'relu','tanh')
-        self.pi_optimizer = tf.keras.optimizers.Adam(actor_lr)
-        self.q_optimizer = tf.keras.optimizers.Adam(critic_lr)
+    def __init__(self,obs_dim,act_dim,hidden_sizes,clip_ratio,actor_lr,critic_lr,beta):
+        self.pi = mlp_model(obs_dim,act_dim,hidden_sizes,'relu','softmax')
+        self.q = mlp_model(obs_dim,1,hidden_sizes,'relu','linear')
+        self.compile_models(actor_lr, critic_lr)
         self.clip_r = clip_ratio
-        self.target_kl = target_kl
+        self.beta = beta
         self.act_dim = act_dim
 
-    def policy(self, obs):
-        state = tf.expand_dims(tf.convert_to_tensor(obs), 0)
-        logits = self.pi(state)
-        action = tf.squeeze(tf.random.categorical(logits,1), axis=1)
-        logprob = logprobabilities(logits, action, self.act_dim)
-        value = tf.squeeze(self.q(state))
-        return action, logprob, value
+    def compile_models(self, actor_lr, critic_lr):
+        self.pi.compile(loss=self.actor_loss, optimizer=tf.keras.optimizers.Adam(actor_lr))
+        self.q.compile(loss=self.critic_loss, optimizer=tf.keras.optimizers.Adam(critic_lr))
+        print(self.pi.summary())
+        print(self.q.summary())
 
-    def learn(self, buffer, actor_iter=120, critic_iter=120):
+    def policy(self, obs):
+        state = tf.expand_dims(tf.convert_to_tensor(obs),0)
+        pred = tf.squeeze(self.pi(state),axis=0).numpy()
+        action = np.random.choice(self.act_dim, p=pred) # index of action
+        value = tf.squeeze(self.q(state), axis=0).numpy()[0]
+        return action, pred, value
+
+    def value(self, obs):
+        state = tf.expand_dims(tf.convert_to_tensor(obs),0)
+        value = tf.squeeze(self.q(state), axis=0).numpy()[0]
+        return value
+
+    def actor_loss(self, y, y_pred):
+        # y: np.hstack([advantages, probs, actions]), y_pred: predict actions
+        advs, prob, acts = y[:,:1], y[:,1:1+self.act_dim],y[:,1+self.act_dim:]
+        ratio = (y_pred*acts)/(prob*acts + 1e-10)
+        p1 = ratio*advs
+        p2 = tf.clip_by_value(ratio, 1-self.clip_r, 1+self.clip_r)*advs
+        # total loss = policy loss + entropy loss (entropy loss for promote action diversity)
+        loss = -tf.reduce_mean(tf.minimum(p1,p2)+self.beta*(-y_pred*tf.math.log(y_pred+1e-10)))
+        return loss
+
+    def critic_loss(self, y, y_pred):
+        loss = tf.keras.losses.MSE(y, y_pred)
+        return loss
+
+    def learn(self, buffer, batch_size=64, actor_iter=80, critic_iter=80):
         data = buffer.get()
         obs_buf = data['obs']
-        act_buf = data['act']
-        adv_buf = data['adv']
-        ret_buf = data['ret']
-        logprob_buf = data['logp']
-        for _ in range(actor_iter):
-            kl = self.update_pi(obs_buf, act_buf, logprob_buf, adv_buf)
-            if kl > 1.5 * self.target_kl:
-                break # Early Stopping
-        for _ in range(critic_iter):
-            self.update_q(obs_buf, ret_buf)
-
-    def update_pi(self, obs, act, logp, adv):
-        with tf.GradientTape() as tape:
-            ratio = tf.exp(logprobabilities(self.pi(obs), act, self.act_dim) - logp)
-            min_adv = tf.where(adv > 0, (1+self.clip_r)*adv, (1-self.clip_r)*adv)
-            loss = -tf.reduce_mean(tf.minimum(ratio*adv, min_adv))
-        grads = tape.gradient(loss, self.pi.trainable_variables)
-        self.pi_optimizer.apply_gradients(zip(grads, self.pi.trainable_variables))
-        kl = tf.reduce_mean(logp - logprobabilities(self.pi(obs), act, self.act_dim))
-        return tf.reduce_sum(kl)
-
-    def update_q(self, obs, ret):
-        with tf.GradientTape() as tape:
-            loss = tf.keras.losses.MSE(ret, self.q(obs))
-        grads = tape.gradient(loss, self.q.trainable_variables)
-        self.q_optimizer.apply_gradients(zip(grads, self.q.trainable_variables))
+        act_buf = np.vstack(data['act'])
+        ret_buf = np.vstack(data['ret'])
+        adv_buf = np.vstack(data['adv'])
+        prob_buf = np.vstack(data['prob'])
+        self.pi.fit(
+            x = obs_buf,
+            y = np.hstack([adv_buf, prob_buf, act_buf]),
+            batch_size = batch_size,
+            epochs = actor_iter,
+            shuffle = True,
+            verbose = 0,
+            callbacks=None
+        ) # traning pi network
+        self.q.fit(
+            x = obs_buf,
+            y = ret_buf,
+            batch_size = batch_size,
+            epochs = critic_iter,
+            shuffle = True,
+            verbose = 0,
+            callbacks=None
+        ) # training q network

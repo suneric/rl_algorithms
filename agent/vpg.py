@@ -12,8 +12,7 @@ def mlp_model(input_dim, output_dim, hidden_sizes, activation, output_activation
     x = layers.Dense(hidden_sizes[0], activation=activation)(input)
     for i in range(1, len(hidden_sizes)):
         x = layers.Dense(hidden_sizes[i], activation=activation)(x)
-    initializer = tf.keras.initializers.RandomUniform(minval=-0.003, maxval=0.003)
-    output = layers.Dense(output_dim, activation=output_activation, kernel_initializer=initializer)(x)
+    output = layers.Dense(output_dim, activation=output_activation)(x)
     return tf.keras.Model(input, output)
 
 class ReplayBuffer:
@@ -23,21 +22,22 @@ class ReplayBuffer:
     """
     def __init__(self, obs_dim, act_dim, capacity, gamma=0.99, lamda=0.95):
         self.obs_buf = np.zeros((capacity, obs_dim), dtype=np.float32)
-        self.act_buf = np.zeros(capacity, dtype=np.int32)
+        self.act_buf = np.zeros((capacity, act_dim), dtype=np.float32) # one hot action list
+        self.prob_buf = np.zeros((capacity, act_dim), dtype=np.float32)
         self.rew_buf = np.zeros(capacity, dtype=np.float32)
         self.ret_buf = np.zeros(capacity, dtype=np.float32)
         self.val_buf = np.zeros(capacity, dtype=np.float32)
         self.adv_buf = np.zeros(capacity, dtype=np.float32)
-        self.logprob_buf = np.zeros(capacity, dtype=np.float32)
+
         self.gamma, self.lamda = gamma, lamda
         self.ptr, self.traj_idx = 0, 0
 
-    def store(self, obs, act, rew, value, logprob):
+    def store(self, obs, act, rew, val, prob):
         self.obs_buf[self.ptr]=obs
         self.act_buf[self.ptr]=act
         self.rew_buf[self.ptr]=rew
-        self.val_buf[self.ptr]=value
-        self.logprob_buf[self.ptr]=logprob
+        self.val_buf[self.ptr]=val
+        self.prob_buf[self.ptr]=prob
         self.ptr += 1
 
     def finish_trajectory(self, last_value = 0):
@@ -56,16 +56,18 @@ class ReplayBuffer:
         """
         Get all data of the buffer and normalize the advantages
         """
-        self.ptr, self.traj_idx = 0, 0
-        adv_mean, adv_std = np.mean(self.adv_buf), np.std(self.adv_buf)
-        self.adv_buf = (self.adv_buf-adv_mean) / adv_std
-        return dict(
-            obs=self.obs_buf,
-            act=self.act_buf,
-            adv=self.adv_buf,
-            ret=self.ret_buf,
-            logp=self.logprob_buf,
+        s = slice(0,self.ptr)
+        advs = self.adv_buf[s]
+        normalized_advs = (advs-np.mean(advs)) / (np.std(advs)+1e-10)
+        data = dict(
+            obs=self.obs_buf[s],
+            act=self.act_buf[s],
+            ret=self.ret_buf[s],
+            prob=self.prob_buf[s],
+            adv=normalized_advs,
             )
+        self.ptr, self.traj_idx = 0, 0
+        return data
 
 class VPG:
     """
@@ -87,47 +89,47 @@ class VPG:
     bad loop and is not always able to recover.
     """
     def __init__(self,obs_dim,act_dim,hidden_sizes,pi_lr,q_lr,target_kl):
-        self.pi = mlp_model(obs_dim,act_dim,hidden_sizes,'relu','tanh')
-        self.q = mlp_model(obs_dim,1,hidden_sizes,'relu','tanh')
+        self.pi = mlp_model(obs_dim,act_dim,hidden_sizes,'relu','softmax')
+        self.q = mlp_model(obs_dim,1,hidden_sizes,'relu','linear')
         self.pi_optimizer = tf.keras.optimizers.Adam(pi_lr)
         self.q_optimizer = tf.keras.optimizers.Adam(q_lr)
         self.target_kl = target_kl
         self.act_dim = act_dim
 
     def policy(self, obs):
-        state = tf.expand_dims(tf.convert_to_tensor(obs), 0)
-        logits = self.pi(state)
-        action = tf.squeeze(tf.random.categorical(logits,1), axis=1)
-        logprob = logprobabilities(logits, action, self.act_dim)
-        value = self.q(state)
-        return action, logprob, value
+        state = tf.expand_dims(tf.convert_to_tensor(obs),0)
+        pred = tf.squeeze(self.pi(state),axis=0).numpy()
+        action = np.random.choice(self.act_dim, p=pred) # index of action
+        value = tf.squeeze(self.q(state), axis=0).numpy()[0]
+        return action, pred, value
 
-    def learn(self, buffer, critic_iter=120):
+    def value(self, obs):
+        state = tf.expand_dims(tf.convert_to_tensor(obs),0)
+        value = tf.squeeze(self.q(state), axis=0).numpy()[0]
+        return value
+
+    def learn(self, buffer, iter=80):
         data = buffer.get()
         obs_buf = data['obs']
         act_buf = data['act']
         adv_buf = data['adv']
         ret_buf = data['ret']
-        logprob_buf = data['logp']
-        kl = 0.0
-        while kl < 1.5*self.target_kl:
-            kl, ent = self.update_pi(obs_buf, act_buf, logprob_buf, adv_buf)
-        for _ in range(critic_iter):
-            self.update_q(obs_buf, ret_buf)
-        return kl, ent
+        prob_buf = data['prob']
+        self.update(obs_buf, act_buf, adv_buf, ret_buf, prob_buf, iter)
 
-    def update_pi(self, obs, act, logp, adv):
+    def update(self, obs, act, adv, ret, prob, iter):
         with tf.GradientTape() as tape:
-            logp_new = logprobabilities(self.pi(obs),act,self.act_dim)
-            loss = -tf.reduce_mean(logp_new*adv)
-        grads = tape.gradient(loss, self.pi.trainable_variables)
-        self.pi_optimizer.apply_gradients(zip(grads, self.pi.trainable_variables))
-        kl = tf.reduce_mean(logp - logprobabilities(self.pi(obs),act, self.act_dim))
-        ent = tf.reduce_mean(-logprobabilities(self.pi(obs),act,self.act_dim))
-        return tf.reduce_sum(kl), tf.reduce_sum(ent)
+            logp = tf.reduce_sum(act*self.pi(obs,training=True), axis=1)
+            pi_loss = -tf.reduce_mean(logp*adv)
+        pi_grad = tape.gradient(pi_loss, self.pi.trainable_variables)
+        for _ in range(iter):
+            self.pi_optimizer.apply_gradients(zip(pi_grad, self.pi.trainable_variables))
+            kl = tf.reduce_mean(act*prob-act*self.pi(obs)).numpy()
+            if kl > 1.5*self.target_kl:
+                break
 
-    def update_q(self, obs, ret):
         with tf.GradientTape() as tape:
-            loss = tf.keras.losses.MSE(ret, self.q(obs))
-        grads = tape.gradient(loss, self.q.trainable_variables)
-        self.q_optimizer.apply_gradients(zip(grads, self.q.trainable_variables))
+            q_loss = tf.keras.losses.MSE(ret, self.q(obs, training=True))
+        q_grad = tape.gradient(q_loss, self.q.trainable_variables)
+        for _ in range(iter):
+            self.q_optimizer.apply_gradients(zip(q_grad, self.q.trainable_variables))

@@ -174,10 +174,12 @@ Configuration:
 - buffer capacity: 100000
 - batch size: 64
 - target_kl: 0.01
--
+- total episode count: 1000
+- start steps: 10000
+- max steps per episode: 500
 
 <p align="center">
-<img src="https://github.com/suneric/rl_algorithms/blob/main/references/training_performance.png" width=80% height=80%>
+<img src="https://github.com/suneric/rl_algorithms/blob/main/references/training_performance.png" width=100% height=100%>
 </p>
 
 ## References
