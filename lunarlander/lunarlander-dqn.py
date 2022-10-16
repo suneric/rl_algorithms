@@ -17,8 +17,9 @@ gpu_devices = tf.config.experimental.list_physical_devices('GPU')
 for device in gpu_devices:
     tf.config.experimental.set_memory_growth(device, True)
 
-np.random.seed(123)
-tf.random.set_seed(123)
+RANDOM_SEED = 123
+np.random.seed(RANDOM_SEED)
+tf.random.set_seed(RANDOM_SEED)
 
 if __name__ == '__main__':
     env = gym.make("LunarLander-v2", continuous = False, render_mode='human')

@@ -35,14 +35,14 @@ if __name__ == '__main__':
     logDir = 'logs/dqn' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     summaryWriter = tf.summary.create_file_writer(logDir)
 
-    total_episodes, ep_max_step = 1000, 500
+    total_episodes = 1000
     epsilon, epsilon_stop, decay = 0.99, 0.1, 0.99
     ep_ret_list, avg_ret_list = [], []
     for ep in range(total_episodes):
         epsilon = max(epsilon_stop, epsilon*decay)
         done, ep_ret, ep_step = False, 0, 0
         state = env.reset()
-        while not done and ep_step < ep_max_step:
+        while not done:
             a = agent.policy(state[0], epsilon)
             new_state = env.step(a)
             r, done = new_state[1], new_state[2]

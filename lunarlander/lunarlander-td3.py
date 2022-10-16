@@ -18,8 +18,9 @@ gpu_devices = tf.config.experimental.list_physical_devices('GPU')
 for device in gpu_devices:
     tf.config.experimental.set_memory_growth(device, True)
 
-np.random.seed(123)
-tf.random.set_seed(123)
+RANDOM_SEED = 123
+np.random.seed(RANDOM_SEED)
+tf.random.set_seed(RANDOM_SEED)
 
 if __name__ == '__main__':
     env = gym.make(
@@ -31,7 +32,6 @@ if __name__ == '__main__':
         turbulence_power = 1.5,
         render_mode = 'human'
     )
-
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
     act_limit = env.action_space.high[0]
@@ -50,7 +50,7 @@ if __name__ == '__main__':
     summaryWriter = tf.summary.create_file_writer(logDir)
 
     total_episodes, ep_max_step = 1000, 500
-    t, start_steps = 0, 1e4
+    t, start_steps, update_after = 0, 1e4, 1e3
     ep_ret_list, avg_ret_list = [], []
     for ep in range(total_episodes):
         done, ep_ret, ep_step = False, 0, 0
@@ -68,7 +68,8 @@ if __name__ == '__main__':
             ep_ret += r
             state = new_state
 
-            agent.learn(buffer)
+            if t > update_after:
+                agent.learn(buffer)
 
         with summaryWriter.as_default():
             tf.summary.scalar('episode reward', ep_ret, step=ep)

@@ -91,10 +91,15 @@ class VPG:
     def __init__(self,obs_dim,act_dim,hidden_sizes,pi_lr,q_lr,target_kl):
         self.pi = mlp_model(obs_dim,act_dim,hidden_sizes,'relu','softmax')
         self.q = mlp_model(obs_dim,1,hidden_sizes,'relu','linear')
-        self.pi_optimizer = tf.keras.optimizers.Adam(pi_lr)
-        self.q_optimizer = tf.keras.optimizers.Adam(q_lr)
+        self.compile_models(pi_lr, q_lr)
         self.target_kl = target_kl
         self.act_dim = act_dim
+
+    def compile_models(self, actor_lr, critic_lr):
+        self.pi.compile(loss=self.actor_loss, optimizer=tf.keras.optimizers.Adam(actor_lr))
+        self.q.compile(loss="mse", optimizer=tf.keras.optimizers.Adam(critic_lr))
+        print(self.pi.summary())
+        print(self.q.summary())
 
     def policy(self, obs):
         state = tf.expand_dims(tf.convert_to_tensor(obs),0)
@@ -108,28 +113,44 @@ class VPG:
         value = tf.squeeze(self.q(state), axis=0).numpy()[0]
         return value
 
-    def learn(self, buffer, iter=80):
+    def actor_loss(self, y, y_pred):
+        # y: np.hstack([returns, probs, actions]), y_pred: predict actions
+        advs, prob, acts = y[:,:1], y[:,1:1+self.act_dim],y[:,1+self.act_dim:]
+        logp = y_pred*acts
+        loss = -tf.reduce_mean(tf.math.reduce_sum(logp)*advs)
+        return loss
+
+    def critic_loss(self, y, y_pred):
+        loss = tf.keras.losses.MSE(y, y_pred)
+        return loss
+
+    def learn(self, buffer, batch_size=64, iter=80):
         data = buffer.get()
         obs_buf = data['obs']
-        act_buf = data['act']
-        adv_buf = data['adv']
-        ret_buf = data['ret']
-        prob_buf = data['prob']
-        self.update(obs_buf, act_buf, adv_buf, ret_buf, prob_buf, iter)
-
-    def update(self, obs, act, adv, ret, prob, iter):
-        with tf.GradientTape() as tape:
-            logp = tf.reduce_sum(act*self.pi(obs,training=True), axis=1)
-            pi_loss = -tf.reduce_mean(logp*adv)
-        pi_grad = tape.gradient(pi_loss, self.pi.trainable_variables)
+        act_buf = np.vstack(data['act'])
+        ret_buf = np.vstack(data['ret'])
+        adv_buf = np.vstack(data['adv'])
+        prob_buf = np.vstack(data['prob'])
         for _ in range(iter):
-            self.pi_optimizer.apply_gradients(zip(pi_grad, self.pi.trainable_variables))
-            kl = tf.reduce_mean(act*prob-act*self.pi(obs)).numpy()
+            self.pi.fit(
+                x = obs_buf,
+                y = np.hstack([adv_buf, prob_buf, act_buf]),
+                batch_size = batch_size,
+                epochs = 1,
+                shuffle = True,
+                verbose = 0,
+                callbacks=None
+            ) # traning pi network
+            kl = tf.reduce_mean(act_buf*prob_buf-act_buf*self.pi(obs_buf)).numpy()
+            kl = tf.reduce_sum(kl)
             if kl > 1.5*self.target_kl:
                 break
-
-        with tf.GradientTape() as tape:
-            q_loss = tf.keras.losses.MSE(ret, self.q(obs, training=True))
-        q_grad = tape.gradient(q_loss, self.q.trainable_variables)
-        for _ in range(iter):
-            self.q_optimizer.apply_gradients(zip(q_grad, self.q.trainable_variables))
+        self.q.fit(
+            x = obs_buf,
+            y = ret_buf,
+            batch_size = batch_size,
+            epochs = iter,
+            shuffle = True,
+            verbose = 0,
+            callbacks=None
+        ) # training q network

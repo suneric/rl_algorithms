@@ -28,17 +28,19 @@ def smoothExponential(data, weight):
 
 if __name__ == "__main__":
     dqn_csv = pd.read_csv('./lunarlander/dqn.csv')
-    ddpg_gs_csv = pd.read_csv('./lunarlander/ddpg-gs.csv')
-    ddpg_ou_csv = pd.read_csv('./lunarlander/ddpg-ou.csv')
+    ddpg_csv = pd.read_csv('./lunarlander/ddpg.csv')
     td3_csv = pd.read_csv('./lunarlander/td3.csv')
     sac_csv = pd.read_csv('./lunarlander/sac.csv')
+    ppo_csv = pd.read_csv('./lunarlander/ppo.csv')
+    vpg_csv = pd.read_csv('./lunarlander/vpg.csv')
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(x = dqn_csv['Step'], y = smoothExponential(dqn_csv['Value'],0.99),name='DQN', marker=dict(color='#0075DC')))
-    fig.add_trace(go.Scatter(x = ddpg_gs_csv['Step'], y = smoothExponential(ddpg_gs_csv['Value'],0.99),name='DDPG(Gaussian Noise)', marker=dict(color='#191919')))
-    fig.add_trace(go.Scatter(x = ddpg_ou_csv['Step'], y = smoothExponential(ddpg_ou_csv['Value'],0.99),name='DDPG(OU Noise)', marker=dict(color='#FFA405')))
+    fig.add_trace(go.Scatter(x = ddpg_csv['Step'], y = smoothExponential(ddpg_csv['Value'],0.99),name='DDPG', marker=dict(color='#191919')))
     fig.add_trace(go.Scatter(x = td3_csv['Step'], y = smoothExponential(td3_csv['Value'],0.99),name='TD3', marker=dict(color='#00998F')))
     fig.add_trace(go.Scatter(x = sac_csv['Step'], y = smoothExponential(sac_csv['Value'],0.99),name='SAC', marker=dict(color='#50EBEC')))
+    fig.add_trace(go.Scatter(x = ppo_csv['Step'], y = smoothExponential(ppo_csv['Value'],0.99),name='PPO', marker=dict(color='#FFA405')))
+    fig.add_trace(go.Scatter(x = vpg_csv['Step'], y = smoothExponential(vpg_csv['Value'],0.99),name='VPG', marker=dict(color='#FF0180')))
     fig.update_layout(
         title="LunarLander RL Training Performance",
         xaxis_title="Episodes",

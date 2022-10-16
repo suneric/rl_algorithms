@@ -108,7 +108,7 @@ class PPO:
 
     def compile_models(self, actor_lr, critic_lr):
         self.pi.compile(loss=self.actor_loss, optimizer=tf.keras.optimizers.Adam(actor_lr))
-        self.q.compile(loss=self.critic_loss, optimizer=tf.keras.optimizers.Adam(critic_lr))
+        self.q.compile(loss="mse", optimizer=tf.keras.optimizers.Adam(critic_lr))
         print(self.pi.summary())
         print(self.q.summary())
 
@@ -127,11 +127,11 @@ class PPO:
     def actor_loss(self, y, y_pred):
         # y: np.hstack([advantages, probs, actions]), y_pred: predict actions
         advs, prob, acts = y[:,:1], y[:,1:1+self.act_dim],y[:,1+self.act_dim:]
-        ratio = (y_pred*acts)/(prob*acts + 1e-10)
-        p1 = ratio*advs
-        p2 = tf.clip_by_value(ratio, 1-self.clip_r, 1+self.clip_r)*advs
-        # total loss = policy loss + entropy loss (entropy loss for promote action diversity)
-        loss = -tf.reduce_mean(tf.minimum(p1,p2)+self.beta*(-y_pred*tf.math.log(y_pred+1e-10)))
+        ratio = (y_pred*acts)/(prob*acts+1e-10)
+        clip_adv = tf.clip_by_value(ratio, 1-self.clip_r, 1+self.clip_r)*advs
+        ent = -y_pred*tf.math.log(y_pred+1e-10) #entropy loss for promote action diversity
+        obj = tf.math.minimum(ratio*advs, clip_adv)+self.beta*ent
+        loss = -tf.math.reduce_mean(obj)
         return loss
 
     def critic_loss(self, y, y_pred):

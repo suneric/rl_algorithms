@@ -17,8 +17,9 @@ gpu_devices = tf.config.experimental.list_physical_devices('GPU')
 for device in gpu_devices:
     tf.config.experimental.set_memory_growth(device, True)
 
-np.random.seed(123)
-tf.random.set_seed(123)
+RANDOM_SEED = 123
+np.random.seed(RANDOM_SEED)
+tf.random.set_seed(RANDOM_SEED)
 
 if __name__ == '__main__':
     env = gym.make("LunarLander-v2", continuous=False, render_mode='human')
@@ -33,12 +34,12 @@ if __name__ == '__main__':
     beta = 0.001
     agent = PPO(obs_dim, act_dim, hidden_sizes, clip_ratio, actor_lr, critic_lr, beta)
 
-    buffer = ReplayBuffer(obs_dim,act_dim,capacity=2000,gamma=0.99,lamda=0.97)
+    buffer = ReplayBuffer(obs_dim,act_dim,capacity=5000,gamma=0.99,lamda=0.97)
 
     logDir = 'logs/ppo' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     summaryWriter = tf.summary.create_file_writer(logDir)
 
-    t, update_steps = 0, 1200
+    t, update_steps = 0, 1500
     total_episodes, ep_max_step = 1000, 500
     ep_ret_list, avg_ret_list = [], []
     for ep in range(total_episodes):
@@ -58,7 +59,7 @@ if __name__ == '__main__':
         buffer.finish_trajectory(last_value)
 
         if buffer.ptr > update_steps or (ep + 1) == total_episodes:
-            agent.learn(buffer)
+            agent.learn(buffer, actor_iter=80, critic_iter=80)
 
         with summaryWriter.as_default():
             tf.summary.scalar('episode reward', ep_ret, step=ep)
