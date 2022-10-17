@@ -3,6 +3,20 @@ import tensorflow as tf
 from tensorflow.keras import layers
 import scipy.signal
 
+def mlp_net(input_dim, output_dim, hidden_sizes, activation='relu', output_activation='linear'):
+    """
+    multiple layer perception network
+    https://www.tensorflow.org/api_docs/python/tf/keras/activations
+    activation: 'relu', 'tanh'
+    output_activation: 'linear', 'softmax'
+    """
+    input = layers.Input(shape=(input_dim,))
+    x = layers.Dense(hidden_sizes[0], activation=activation)(input)
+    for i in range(1, len(hidden_sizes)):
+        x = layers.Dense(hidden_sizes[i], activation=activation)(x)
+    output = layers.Dense(output_dim, activation=output_activation)(x)
+    return tf.keras.Model(input, output)
+
 def copy_network_variables(target_weights, from_weights, polyak = 0.0):
     """
     copy network variables with consider a polyak
@@ -20,14 +34,6 @@ def discount_cumsum(x,discount):
     output: [x0+discount*x1+discount^2*x2, x1+discount*x2, x2]
     """
     return scipy.signal.lfilter([1], [1, float(-discount)], x[::-1], axis=0)[::-1]
-
-def logprobabilities(logits, action, action_dim):
-    """
-    Compute the log-probabilities of taking actions by using logits (e.g. output of the actor)
-    """
-    logprob_all = tf.nn.log_softmax(logits)
-    logprob = tf.reduce_sum(tf.one_hot(action, action_dim)*logprob_all, axis=1)
-    return logprob
 
 class GSNoise:
     """

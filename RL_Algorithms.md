@@ -187,3 +187,5 @@ Configuration:
 - [Tensorflow, Introduction to RL and Deep Q Networks](https://www.tensorflow.org/agents/tutorials/0_intro_rl)
 - [Latex Math Symbols](https://kapeli.com/cheat_sheets/LaTeX_Math_Symbols.docset/Contents/Resources/Documents/index)
 - [Garage Docs](https://garage.readthedocs.io/en/latest/index.html)
+- [Lil'Log](https://lilianweng.github.io/posts/2018-04-08-policy-gradient/)
+- [LinZHank/rl-lunarlander](https://github.com/linZHank/rl-lunarlander)

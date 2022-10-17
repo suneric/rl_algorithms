@@ -27,28 +27,28 @@ if __name__ == '__main__':
     act_dim = env.action_space.n
     print("state {}, action {}".format(obs_dim, act_dim))
 
-    hidden_sizes = [256,256,256]
+    hidden_sizes = [512,512]
     actor_lr = 1e-4
     critic_lr = 2e-4
-    target_kl = 0.01
-    agent = VPG(obs_dim, act_dim, hidden_sizes, actor_lr, critic_lr, target_kl)
+    agent = VPG(obs_dim, act_dim, hidden_sizes, actor_lr, critic_lr)
 
     buffer = ReplayBuffer(obs_dim,act_dim,capacity=5000,gamma=0.99,lamda=0.97)
 
     logDir = 'logs/vpg' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     summaryWriter = tf.summary.create_file_writer(logDir)
 
-    t, update_steps = 0, 1500
+    t, update_steps = 0, 4000
     total_episodes, ep_max_step = 1000, 500
     ep_ret_list, avg_ret_list = [], []
     for ep in range(total_episodes):
         done, ep_ret, ep_step = False, 0, 0
         state = env.reset()
         while not done and ep_step < ep_max_step:
-            a, prob, value = agent.policy(state[0])
+            a = agent.action(state[0])
+            value = agent.value(state[0])
             new_state = env.step(a)
             r, done = new_state[1], new_state[2]
-            buffer.store(state[0],tf.one_hot(a,act_dim).numpy(),r,value,prob)
+            buffer.store(state[0],a,r,value)
             t += 1
             ep_step += 1
             ep_ret += r

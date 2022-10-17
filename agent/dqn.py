@@ -4,16 +4,6 @@ from tensorflow.keras import layers
 from .core import *
 from copy import deepcopy
 
-def mlp_model(obs_dim, act_dim, hidden_sizes, activation):
-    last_init = tf.random_uniform_initializer(minval=-3e-3, maxval=3e-3)
-    input = layers.Input(shape=(obs_dim,))
-    x = layers.Dense(hidden_sizes[0], activation=activation)(input)
-    for i in range(1, len(hidden_sizes)):
-        x = layers.Dense(hidden_sizes[i], activation=activation)(x)
-    output = layers.Dense(act_dim, activation="linear", kernel_initializer=last_init)(x)
-    model = tf.keras.Model(input, output)
-    return model
-
 class ReplayBuffer:
     """
     Replay Buffer for Q-learning
@@ -69,14 +59,12 @@ class DQN:
     truth Q(s,a) can be found with the Bellman Equation: Q(s,a) = max(r+Q(s',a))
     where Q(s',a) = f(s',theta), if the s' is not the terminal state, otherwise
     Q(s',a) = 0, so for the terminal state, Q(s,a) = r.
-
     Problems:
     Because we are using the model prediction f(s' theta) to approximate the real
     value of Q(s', a), this is called semi-gradient, which could be very unstable
     since the real target will change each time the model updates itself. The
     solution is to create target network that is essentially a copy of the traning
     model at certain steps so the target model updates less frequently.
-
     Another issue with the model is overfitting. When update the mode after the end
     of each game, we have already potentially played hundreds of steps, so we are
     essentially doing batch gradient descent. Because each batch always contains
@@ -85,14 +73,14 @@ class DQN:
     hundreds of games and randomly select a batch from it each time to update the
     model.
     """
-    def __init__(self, obs_dim, act_dim, hidden_sizes, gamma, lr, update_stable_freq):
-        self.train = mlp_model(obs_dim, act_dim, hidden_sizes,'relu')
-        self.stable = deepcopy(self.train)
+    def __init__(self, obs_dim, act_dim, hidden_sizes, gamma, lr, update_freq):
+        self.q = mlp_net(obs_dim,act_dim,hidden_sizes,'relu','linear')
+        self.q_stable = deepcopy(self.q)
         self.optimizer = tf.keras.optimizers.Adam(lr)
         self.gamma = gamma
         self.act_dim = act_dim
         self.learn_iter = 0
-        self.update_stable_freq = update_stable_freq
+        self.update_freq = update_freq
 
     def policy(self, obs, epsilon):
         """
@@ -101,39 +89,38 @@ class DQN:
         if np.random.random() < epsilon:
             return np.random.randint(self.act_dim)
         else:
-            return np.argmax(self.train(np.expand_dims(obs, axis=0)))
+            return np.argmax(self.q(np.expand_dims(obs, axis=0)))
 
     def learn(self, buffer):
-        sampled_batch = buffer.sample()
-        obs_batch = sampled_batch['obs']
-        nobs_batch = sampled_batch['nobs']
-        act_batch = sampled_batch['act']
-        rew_batch = sampled_batch['rew']
-        done_batch = sampled_batch['done']
+        experiences = buffer.sample()
+        obs_batch = experiences['obs']
+        nobs_batch = experiences['nobs']
+        act_batch = experiences['act']
+        rew_batch = experiences['rew']
+        done_batch = experiences['done']
         self.update(obs_batch, act_batch, rew_batch, nobs_batch, done_batch)
 
     def update(self, obs, act, rew, nobs, done):
         self.learn_iter += 1
         """
-        OPtimal Q-function follows Bellman Equation:
+        Optimal Q-function follows Bellman Equation:
         Q*(s,a) = E [r + gamma*max(Q*(s',a'))]
         """
         with tf.GradientTape() as tape:
             # compute current Q
-            val = self.train(obs,training=True) # state value
-            oh_act = tf.one_hot(act, depth=self.act_dim)
-            pred_q = tf.math.reduce_sum(tf.multiply(val,oh_act), axis=-1)
+            val = self.q(obs,training=True)
+            oh_act = tf.one_hot(act,depth=self.act_dim)
+            pred_q = tf.math.reduce_sum(val*oh_act,axis=-1)
             # compute target Q
-            nval, nact = self.stable(nobs), tf.math.argmax(self.train(nobs, training=True), axis=-1)
-            oh_nact = tf.one_hot(nact, depth=self.act_dim)
-            next_q = tf.math.reduce_sum(tf.math.multiply(nval,oh_nact), axis=-1)
-            actual_q = rew + (1-done) * self.gamma * next_q
+            nval= self.q_stable(nobs)
+            oh_nact = tf.one_hot(tf.math.argmax(self.q(nobs,training=True),axis=-1),depth=self.act_dim)
+            actual_q = rew+(1-done)*self.gamma*tf.math.reduce_sum(nval*oh_nact,axis=-1)
             loss = tf.keras.losses.MSE(actual_q, pred_q)
-        grad = tape.gradient(loss, self.train.trainable_variables)
-        self.optimizer.apply_gradients(zip(grad, self.train.trainable_variables))
+        grad = tape.gradient(loss, self.q.trainable_variables)
+        self.optimizer.apply_gradients(zip(grad, self.q.trainable_variables))
 
         """
         copy train network weights to stable network
         """
-        if self.learn_iter % self.update_stable_freq == 0:
-            copy_network_variables(self.stable.trainable_variables, self.train.trainable_variables)
+        if self.learn_iter % self.update_freq == 0:
+            copy_network_variables(self.q_stable.trainable_variables, self.q.trainable_variables)
