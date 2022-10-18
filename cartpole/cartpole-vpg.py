@@ -30,11 +30,12 @@ if __name__ == '__main__':
     act_dim = env.action_space.n
     print("state {}, action {}".format(obs_dim, act_dim))
 
-    buffer = ReplayBuffer(obs_dim,act_dim,capacity=1000,gamma=0.99,lamda=0.97)
+    buffer = ReplayBuffer(obs_dim,act_dim,capacity=50000,gamma=0.99,lamda=0.97)
     agent = VPG(obs_dim,act_dim,hidden_sizes=[32,32],pi_lr=1e-4,q_lr=2e-4,target_kld=1e-2)
 
     ep_ret_list, avg_ret_list = [], []
-    t, total_episodes, ep_max_steps = 0, 1000, 500
+    t, update_after = 0, 2500
+    total_episodes, ep_max_steps = 1000, 500
     for ep in range(total_episodes):
         done, ep_ret, step = False, 0, 0
         state = env.reset()
@@ -51,7 +52,8 @@ if __name__ == '__main__':
 
         last_value = 0 if done else agent.value(state[0])
         buffer.finish_trajectory(last_value)
-        agent.learn(buffer)
+        if buffer.ptr > update_after:
+            agent.learn(buffer)
 
         with summaryWriter.as_default():
             tf.summary.scalar('episode reward', ep_ret, step=ep)

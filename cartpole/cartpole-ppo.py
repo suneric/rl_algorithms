@@ -30,15 +30,16 @@ if __name__ == '__main__':
     act_dim = env.action_space.n
     print("state {}, action {}".format(obs_dim, act_dim))
 
-    buffer = ReplayBuffer(obs_dim,act_dim,capacity=1000,gamma=0.99,lamda=0.97)
+    buffer = ReplayBuffer(obs_dim,act_dim,capacity=50000,gamma=0.99,lamda=0.97)
     agent = PPO(obs_dim,act_dim,hidden_sizes=[32,32],pi_lr=1e-4,q_lr=2e-4,clip_ratio=0.2,beta=1e-3,target_kld=1e-2)
 
     ep_ret_list, avg_ret_list = [], []
-    t, total_episodes, ep_max_steps = 0, 1000, 500
+    t, update_after = 0, 2500
+    total_episodes, ep_max_steps = 1000, 500
     for ep in range(total_episodes):
-        done, ep_ret, ep_step = False, 0, 0
+        done, ep_ret, step = False, 0, 0
         state = env.reset()
-        while not done and ep_step < ep_max_steps:
+        while not done and step < ep_max_steps:
             a, logp = agent.policy(state[0])
             value = agent.value(state[0])
             new_state = env.step(a)
@@ -46,12 +47,13 @@ if __name__ == '__main__':
             buffer.store(state[0],a,r,value,logp)
             state = new_state
             ep_ret += r
-            ep_step += 1
+            step += 1
             t += 1
 
         last_value = 0 if done else agent.value(state[0])
         buffer.finish_trajectory(last_value)
-        agent.learn(buffer)
+        if buffer.ptr > update_after:
+            agent.learn(buffer)
 
         with summaryWriter.as_default():
             tf.summary.scalar('episode reward', ep_ret, step=ep)

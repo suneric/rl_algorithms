@@ -34,7 +34,8 @@ if __name__ == '__main__':
 
     ep_ret_list, avg_ret_list = [], []
     epsilon, epsilon_stop, decay = 0.99, 0.1, 0.995
-    t, total_episodes, ep_max_steps = 0, 1000, 500
+    t, update_after = 0, 2500
+    total_episodes, ep_max_steps = 1000, 500
     for ep in range(total_episodes):
         epsilon = max(epsilon_stop, epsilon*decay)
         done, ep_ret, step = False, 0, 0
@@ -49,7 +50,8 @@ if __name__ == '__main__':
             step += 1
             t += 1
 
-            agent.learn(buffer)
+            if buffer.ptr > update_after:
+                agent.learn(buffer)
 
         with summaryWriter.as_default():
             tf.summary.scalar('episode reward', ep_ret, step=ep)

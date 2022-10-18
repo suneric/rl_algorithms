@@ -39,7 +39,7 @@ if __name__ == '__main__':
     agent = TD3(obs_dim,act_dim,hidden_sizes,act_limit,gamma=0.99,polyak=0.995,pi_lr=1e-4,q_lr=2e-4,noise_obj=noise)
 
     ep_ret_list, avg_ret_list = [], []
-    t, start_steps, update_after = 0, 5e4, 1e3
+    t, start_steps, update_after = 0, 5e3, 2500
     total_episodes, ep_max_steps = 1000, 500
     for ep in range(total_episodes):
         done, ep_ret, step = False, 0, 0
@@ -57,7 +57,7 @@ if __name__ == '__main__':
             step += 1
             t += 1
 
-            if t > update_after:
+            if buffer.ptr > update_after:
                 agent.learn(buffer)
 
         with summaryWriter.as_default():
