@@ -1,7 +1,3 @@
-"""
-reference:
-https://keras.io/examples/rl/ddpg_pendulum/
-"""
 import sys
 sys.path.append('..')
 sys.path.append('.')
@@ -37,12 +33,12 @@ if __name__ == '__main__':
 
     noise = OUNoise(mu=np.zeros(act_dim),sigma=float(0.2)*np.ones(act_dim))
     buffer = ReplayBuffer(obs_dim,act_dim,capacity=50000,batch_size=64)
-    hidden_sizes=[128,128]
-    agent = DDPG(obs_dim,act_dim,hidden_sizes,act_limit,gamma=0.99,polyak=0.995,pi_lr=1e-4,q_lr=2e-4,noise_obj=noise)
+    hidden_sizes=[256,256]
+    agent = DDPG(obs_dim,act_dim,hidden_sizes,act_limit,gamma=0.99,polyak=0.995,pi_lr=1e-3,q_lr=2e-3,noise_obj=noise)
 
     ep_ret_list, avg_ret_list = [], []
-    t, start_steps, update_after = 0, 5e3, 2500
-    total_episodes, ep_max_steps = 1000, 500
+    t, start_steps, update_after = 0, 1000, 500
+    total_episodes, ep_max_steps = 300, 200
     for ep in range(total_episodes):
         done, ep_ret, step = False, 0, 0
         state = env.reset()
@@ -68,7 +64,7 @@ if __name__ == '__main__':
         ep_ret_list.append(ep_ret)
         avg_ret = np.mean(ep_ret_list[-40:])
         avg_ret_list.append(avg_ret)
-        print("Episode *{}* average reward is {}".format(ep, avg_ret))
+        print("Episode *{}* average reward is {}, total steps {}".format(ep, avg_ret, t))
 
     env.close()
 

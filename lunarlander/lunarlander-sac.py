@@ -22,41 +22,27 @@ np.random.seed(RANDOM_SEED)
 tf.random.set_seed(RANDOM_SEED)
 
 if __name__ == '__main__':
-    env = gym.make(
-        "LunarLander-v2",
-        continuous = True,
-        gravity = -10.0,
-        enable_wind = False,
-        wind_power = 15.0,
-        turbulence_power = 1.5,
-        render_mode = 'human'
-    )
+    logDir = 'logs/sac' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    summaryWriter = tf.summary.create_file_writer(logDir)
+
+    env = gym.make("LunarLander-v2", continuous=True, render_mode='human')
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
     act_limit = env.action_space.high[0]
     print("state {}, action {}, limit {}".format(obs_dim,act_dim,act_limit))
 
-    buffer = ReplayBuffer(obs_dim,act_dim,capacity=100000,batch_size=64)
+    buffer = ReplayBuffer(obs_dim,act_dim,capacity=100000,batch_size=128)
+    hidden_sizes = [512,512]
+    agent = SAC(obs_dim,act_dim,hidden_sizes,act_limit,
+        gamma=0.99,polyak=0.995,pi_lr=1e-4,q_lr=2e-4,alpha_lr=1e-4,alpha=0.2,auto_ent=True)
 
-    hidden_sizes = [256,256,256]
-    gamma = 0.99
-    polyak = 0.995
-    pi_lr = 1e-4
-    q_lr = 2e-4
-    alpha_lr = 1e-4
-    temp = 0.1
-    agent = SAC(obs_dim,act_dim,hidden_sizes,act_limit,gamma,polyak,pi_lr,q_lr,alpha_lr,temp)
-
-    logDir = 'logs/sac' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    summaryWriter = tf.summary.create_file_writer(logDir)
-
-    total_episodes, ep_max_step = 1000, 500
-    t, start_steps, update_after = 0, 1e4, 1e3
     ep_ret_list, avg_ret_list = [], []
+    t, start_steps, update_after, update_freq = 0, 5000, 500, 50
+    total_episodes, ep_max_steps = 300, 200
     for ep in range(total_episodes):
-        done, ep_ret, ep_step = False, 0, 0
+        done, ep_ret, step = False, 0, 0
         state = env.reset()
-        while not done and ep_step < ep_max_step:
+        while not done and step < ep_max_steps:
             if t > start_steps:  # trick for better exploration
                 a = agent.policy(state[0])
             else:
@@ -65,11 +51,11 @@ if __name__ == '__main__':
             r, done = new_state[1], new_state[2]
             buffer.store(state[0],a,r,new_state[0],done)
             t += 1
-            ep_step += 1
+            step += 1
             ep_ret += r
             state = new_state
 
-            if t > update_after:
+            if t > update_after and t % update_freq == 0:
                 agent.learn(buffer)
 
         with summaryWriter.as_default():

@@ -5,9 +5,9 @@ import gym
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
-import os
 import datetime
-from agent.ppo import PPO, ReplayBuffer
+import os
+from agent.sac import SAC, ReplayBuffer
 
 """
 https://www.tensorflow.org/guide/gpu#limiting_gpu_memory_growth
@@ -22,38 +22,41 @@ np.random.seed(RANDOM_SEED)
 tf.random.set_seed(RANDOM_SEED)
 
 if __name__ == '__main__':
-    logDir = 'logs/ppo' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    logDir = 'logs/sac' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     summaryWriter = tf.summary.create_file_writer(logDir)
 
-    env = gym.make("LunarLander-v2", continuous=False, render_mode='human')
+    env = gym.make("Pendulum-v1", render_mode = 'human')
     obs_dim = env.observation_space.shape[0]
-    act_dim = env.action_space.n
-    print("state {}, action {}".format(obs_dim, act_dim))
+    act_dim = env.action_space.shape[0]
+    act_limit = env.action_space.high[0]
+    print("state {}, action {}, limit {}".format(obs_dim,act_dim,act_limit))
 
-    buffer = ReplayBuffer(obs_dim,act_dim,capacity=50000,gamma=0.99,lamda=0.97)
-    agent = PPO(obs_dim,act_dim,hidden_sizes=[512,512],pi_lr=1e-4,q_lr=2e-4,clip_ratio=0.2,beta=1e-3,target_kld=1e-2)
+    buffer = ReplayBuffer(obs_dim,act_dim,capacity=50000,batch_size=64)
+    hidden_sizes = [256,256]
+    agent = SAC(obs_dim,act_dim,hidden_sizes,act_limit,
+        gamma=0.99,polyak=0.995,pi_lr=1e-4,q_lr=2e-4,alpha_lr=1e-4,alpha=0.2,auto_ent=True)
 
     ep_ret_list, avg_ret_list = [], []
-    t, update_after = 0, 2500
-    total_episodes, ep_max_steps = 1000, 500
+    t, start_steps, update_after, update_freq = 0, 5000, 500, 50
+    total_episodes, ep_max_steps = 300, 200
     for ep in range(total_episodes):
         done, ep_ret, step = False, 0, 0
         state = env.reset()
         while not done and step < ep_max_steps:
-            a, logp = agent.policy(state[0])
-            value = agent.value(state[0])
+            if t > start_steps:  # trick for better exploration
+                a = agent.policy(state[0])
+            else:
+                a = env.action_space.sample()
             new_state = env.step(a)
             r, done = new_state[1], new_state[2]
-            buffer.store(state[0],a,r,value,logp)
-            state = new_state
-            ep_ret += r
-            step += 1
+            buffer.store(state[0],a,r,new_state[0],done)
             t += 1
+            step += 1
+            ep_ret += r
+            state = new_state
 
-        last_value = 0 if done else agent.value(state[0])
-        buffer.finish_trajectory(last_value)
-        if buffer.ptr > update_after:
-            agent.learn(buffer)
+            if t > update_after and t % update_freq == 0:
+                agent.learn(buffer)
 
         with summaryWriter.as_default():
             tf.summary.scalar('episode reward', ep_ret, step=ep)

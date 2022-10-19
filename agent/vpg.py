@@ -87,8 +87,8 @@ class VPG:
         """
         logits = self.pi(tf.expand_dims(tf.convert_to_tensor(obs),0))
         dist = tfp.distributions.Categorical(logits=logits)
-        action = dist.sample().numpy()[0]
-        logprob = dist.log_prob(action).numpy()[0]
+        action = tf.squeeze(dist.sample()).numpy()
+        logprob = tf.squeeze(dist.log_prob(action)).numpy()
         return action, logprob
 
     def value(self, obs):
@@ -96,7 +96,7 @@ class VPG:
         return q value of an observation based on q-function network
         """
         val = self.q(tf.expand_dims(tf.convert_to_tensor(obs),0))
-        return tf.squeeze(val,axis=0).numpy()[0]
+        return tf.squeeze(val).numpy()
 
     def learn(self, buffer, iter=80):
         experiences = buffer.get()

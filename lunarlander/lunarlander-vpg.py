@@ -22,43 +22,38 @@ np.random.seed(RANDOM_SEED)
 tf.random.set_seed(RANDOM_SEED)
 
 if __name__ == '__main__':
+    logDir = 'logs/vpg' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    summaryWriter = tf.summary.create_file_writer(logDir)
+
     env = gym.make("LunarLander-v2", continuous=False, render_mode='human')
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.n
     print("state {}, action {}".format(obs_dim, act_dim))
 
-    hidden_sizes = [512,512]
-    actor_lr = 1e-4
-    critic_lr = 2e-4
-    agent = VPG(obs_dim, act_dim, hidden_sizes, actor_lr, critic_lr)
+    buffer = ReplayBuffer(obs_dim,act_dim,capacity=50000,gamma=0.99,lamda=0.97)
+    agent = VPG(obs_dim,act_dim,hidden_sizes=[512,512],pi_lr=1e-4,q_lr=2e-4,target_kld=1e-2)
 
-    buffer = ReplayBuffer(obs_dim,act_dim,capacity=5000,gamma=0.99,lamda=0.97)
-
-    logDir = 'logs/vpg' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    summaryWriter = tf.summary.create_file_writer(logDir)
-
-    t, update_steps = 0, 4000
-    total_episodes, ep_max_step = 1000, 500
     ep_ret_list, avg_ret_list = [], []
+    t, update_after = 0, 2500
+    total_episodes, ep_max_steps = 1000, 500
     for ep in range(total_episodes):
-        done, ep_ret, ep_step = False, 0, 0
+        done, ep_ret, step = False, 0, 0
         state = env.reset()
-        while not done and ep_step < ep_max_step:
-            a = agent.action(state[0])
+        while not done and step < ep_max_steps:
+            a, logp = agent.policy(state[0])
             value = agent.value(state[0])
             new_state = env.step(a)
             r, done = new_state[1], new_state[2]
-            buffer.store(state[0],a,r,value)
-            t += 1
-            ep_step += 1
-            ep_ret += r
+            buffer.store(state[0],a,r,value,logp)
             state = new_state
+            ep_ret += r
+            step += 1
+            t += 1
 
         last_value = 0 if done else agent.value(state[0])
         buffer.finish_trajectory(last_value)
-
-        if buffer.ptr > update_steps or (ep + 1) == total_episodes:
-            agent.learn(buffer, iter=80)
+        if buffer.ptr > update_after:
+            agent.learn(buffer)
 
         with summaryWriter.as_default():
             tf.summary.scalar('episode reward', ep_ret, step=ep)

@@ -7,7 +7,7 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import datetime
 import os
-from agent.core import GSNoise, OUNoise
+from agent.core import OUNoise
 from agent.ddpg import DDPG, ReplayBuffer
 
 """
@@ -18,45 +18,32 @@ gpu_devices = tf.config.experimental.list_physical_devices('GPU')
 for device in gpu_devices:
     tf.config.experimental.set_memory_growth(device, True)
 
-RANDOM_SEED = 123
-np.random.seed(RANDOM_SEED)
-tf.random.set_seed(RANDOM_SEED)
+np.random.seed(123)
+tf.random.set_seed(123)
 
 if __name__ == '__main__':
-    env = gym.make(
-        "LunarLander-v2",
-        continuous = True,
-        gravity = -10.0,
-        enable_wind = False,
-        wind_power = 15.0,
-        turbulence_power = 1.5,
-        render_mode = 'human'
-    )
+    logDir = 'logs/ddpg' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    summaryWriter = tf.summary.create_file_writer(logDir)
+
+    env = gym.make("LunarLander-v2", continuous=True, render_mode='human')
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
     act_limit = env.action_space.high[0]
     print("state {}, action {}, limit {}".format(obs_dim,act_dim,act_limit))
 
-    buffer = ReplayBuffer(obs_dim,act_dim,capacity=100000,batch_size=64)
-    #noise = GSNoise(mu=np.zeros(act_dim),sigma=float(0.2)*np.ones(act_dim))
     noise = OUNoise(mu=np.zeros(act_dim),sigma=float(0.2)*np.ones(act_dim))
-    hidden_sizes = [256,256,256]
-    gamma = 0.99
-    polyak = 0.995
-    pi_lr = 1e-4
-    q_lr = 2e-4
-    agent = DDPG(obs_dim,act_dim,hidden_sizes,act_limit,gamma,polyak,pi_lr,q_lr,noise)
+    buffer = ReplayBuffer(obs_dim,act_dim,capacity=100000,batch_size=128)
+    hidden_sizes=[256,256]
+    agent = DDPG(obs_dim,act_dim,hidden_sizes,act_limit,
+        gamma=0.99,polyak=0.995,pi_lr=1e-4,q_lr=2e-4,noise_obj=noise)
 
-    logDir = 'logs/ddpg' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    summaryWriter = tf.summary.create_file_writer(logDir)
-
-    total_episodes, ep_max_step = 1000, 500
-    t, start_steps, update_after = 0, 1e4, 1e3
     ep_ret_list, avg_ret_list = [], []
+    t, start_steps, update_after = 0, 1000, 500
+    total_episodes, ep_max_steps = 300, 200
     for ep in range(total_episodes):
-        done, ep_ret, ep_step = False, 0, 0
+        done, ep_ret, step = False, 0, 0
         state = env.reset()
-        while not done and ep_step < ep_max_step:
+        while not done and step < ep_max_steps:
             if t > start_steps: # trick for improving exploration
                 a = agent.policy(state[0])
             else:
@@ -64,12 +51,12 @@ if __name__ == '__main__':
             new_state = env.step(a)
             r, done = new_state[1], new_state[2]
             buffer.store(state[0],a,r,new_state[0],done)
-            t += 1
-            ep_step += 1
-            ep_ret += r
             state = new_state
+            ep_ret += r
+            step += 1
+            t += 1
 
-            if t > update_after:
+            if buffer.ptr > update_after:
                 agent.learn(buffer)
 
         with summaryWriter.as_default():
