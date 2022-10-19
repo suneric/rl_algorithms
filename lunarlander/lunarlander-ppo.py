@@ -31,11 +31,12 @@ if __name__ == '__main__':
     print("state {}, action {}".format(obs_dim, act_dim))
 
     buffer = ReplayBuffer(obs_dim,act_dim,capacity=50000,gamma=0.99,lamda=0.97)
-    agent = PPO(obs_dim,act_dim,hidden_sizes=[512,512],pi_lr=1e-4,q_lr=2e-4,clip_ratio=0.2,beta=1e-3,target_kld=1e-2)
+    agent = PPO(obs_dim,act_dim,hidden_sizes=[400,400],
+        pi_lr=2e-4,q_lr=3e-4,clip_ratio=0.2,beta=1e-3,target_kld=1e-2)
 
     ep_ret_list, avg_ret_list = [], []
-    t, update_after = 0, 2500
-    total_episodes, ep_max_steps = 1000, 500
+    t, update_after = 0, 1e3
+    total_episodes, ep_max_steps = 500, 1000
     for ep in range(total_episodes):
         done, ep_ret, step = False, 0, 0
         state = env.reset()
@@ -61,7 +62,7 @@ if __name__ == '__main__':
         ep_ret_list.append(ep_ret)
         avg_ret = np.mean(ep_ret_list[-40:])
         avg_ret_list.append(avg_ret)
-        print("Episode *{}* average reward is {}, total steps {}".format(ep, avg_ret, t))
+        print("Episode *{}* average reward is {:.4f}, episode length {}".format(ep, avg_ret, step))
 
     env.close()
 

@@ -31,14 +31,13 @@ if __name__ == '__main__':
     act_limit = env.action_space.high[0]
     print("state {}, action {}, limit {}".format(obs_dim,act_dim,act_limit))
 
-    buffer = ReplayBuffer(obs_dim,act_dim,capacity=100000,batch_size=128)
-    hidden_sizes = [512,512]
-    agent = SAC(obs_dim,act_dim,hidden_sizes,act_limit,
-        gamma=0.99,polyak=0.995,pi_lr=1e-4,q_lr=2e-4,alpha_lr=1e-4,alpha=0.2,auto_ent=True)
+    buffer = ReplayBuffer(obs_dim,act_dim,capacity=50000,batch_size=128)
+    agent = SAC(obs_dim,act_dim,hidden_sizes=[400,400],
+        act_limit=act_limit,gamma=0.99,polyak=0.995,pi_lr=2e-4,q_lr=3e-4,alpha_lr=2e-4,alpha=0.2,auto_ent=True)
 
     ep_ret_list, avg_ret_list = [], []
-    t, start_steps, update_after, update_freq = 0, 5000, 500, 50
-    total_episodes, ep_max_steps = 300, 200
+    t, start_steps, update_after, update_freq = 0, 1e4, 1e3, 50
+    total_episodes, ep_max_steps = 500, 1000
     for ep in range(total_episodes):
         done, ep_ret, step = False, 0, 0
         state = env.reset()
@@ -64,7 +63,7 @@ if __name__ == '__main__':
         ep_ret_list.append(ep_ret)
         avg_ret = np.mean(ep_ret_list[-40:])
         avg_ret_list.append(avg_ret)
-        print("Episode *{}* average reward is {}, total steps {}".format(ep, avg_ret, t))
+        print("Episode *{}* average reward is {:.4f}, episode length {}".format(ep, avg_ret, step))
 
     env.close()
 

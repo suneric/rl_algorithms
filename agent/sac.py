@@ -22,11 +22,11 @@ def twin_critic_model(obs_dim, act_dim, hidden_sizes, activation):
     x1 = layers.Dense(hidden_sizes[0], activation=activation)(x0)
     for i in range(1, len(hidden_sizes)):
         x1 = layers.Dense(hidden_sizes[i], activation=activation)(x1)
-    output_1 = layers.Dense(1)(x1)
+    output_1 = layers.Dense(1, activation='linear')(x1)
     x2 = layers.Dense(hidden_sizes[0], activation=activation)(x0)
     for i in range(1, len(hidden_sizes)):
         x2 = layers.Dense(hidden_sizes[i], activation=activation)(x2)
-    output_2 = layers.Dense(1)(x2)
+    output_2 = layers.Dense(1, activation='linear')(x2)
     model = tf.keras.Model([obs_input, act_input], [output_1, output_2])
     return model
 
@@ -109,7 +109,7 @@ class SAC:
     def policy(self, obs):
         state = tf.expand_dims(tf.convert_to_tensor(obs),0)
         act, logp = self.sample_action(state)
-        return [tf.squeeze(act).numpy()]
+        return tf.squeeze(act).numpy()
 
     def sample_action(self, state, deterministic=False):
         mu, logstd = self.pi(state)

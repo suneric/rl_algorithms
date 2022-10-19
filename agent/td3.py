@@ -22,11 +22,11 @@ def twin_critic_model(obs_dim, act_dim, hidden_sizes, activation):
     x1 = layers.Dense(hidden_sizes[0], activation=activation)(x0)
     for i in range(1, len(hidden_sizes)):
         x1 = layers.Dense(hidden_sizes[i], activation=activation)(x1)
-    output_1 = layers.Dense(1)(x1)
+    output_1 = layers.Dense(1,activation='linear')(x1)
     x2 = layers.Dense(hidden_sizes[0], activation=activation)(x0)
     for i in range(1, len(hidden_sizes)):
         x2 = layers.Dense(hidden_sizes[i], activation=activation)(x2)
-    output_2 = layers.Dense(1)(x2)
+    output_2 = layers.Dense(1, activation='linear')(x2)
     model = tf.keras.Model([obs_input, act_input], [output_1, output_2])
     return model
 
@@ -43,8 +43,8 @@ class ReplayBuffer:
         self.obs_buf = np.zeros((capacity, obs_dim),dtype=np.float32)
         self.nobs_buf = np.zeros((capacity, obs_dim),dtype=np.float32)
         self.act_buf = np.zeros((capacity, act_dim), dtype=np.float32)
-        self.rew_buf = np.zeros((capacity, 1), dtype=np.float32)
-        self.done_buf = np.zeros((capacity, 1), dtype=np.float32)
+        self.rew_buf = np.zeros(capacity, dtype=np.float32)
+        self.done_buf = np.zeros(capacity, dtype=np.float32)
         self.ptr, self.size, self.max_size = 0, 0, capacity
         self.batch_size = batch_size
 
@@ -104,14 +104,15 @@ class TD3:
         self.pi_learn_interval = 2
         self.learn_iter = 0
 
-    def policy(self, obs):
+    def policy(self, obs, noise = None):
         """
         returns an action sampled from actor model adding noise for exploration
         """
         state = tf.expand_dims(tf.convert_to_tensor(obs),0)
-        sampled_acts = tf.squeeze(self.pi(state))
-        noised_acts = sampled_acts.numpy() + self.noise_obj()
-        legal_act = np.clip(noised_acts, -self.act_limit, self.act_limit)
+        sampled_acts = tf.squeeze(self.pi(state)).numpy()
+        if noise is not None:
+            sampled_acts += noise
+        legal_act = np.clip(sampled_acts, -self.act_limit, self.act_limit)
         return legal_act
 
     def learn(self, buffer):
@@ -133,12 +134,12 @@ class TD3:
             Trick 3: add noise to the target action, making it harder for the policy to
             exploit Q-function errors by smoothing out Q along changes in action.
             """
-            target_act = self.pi_target(nobs, training=True) + self.noise_obj()
-            target_act = tf.clip_by_value(target_act, -self.act_limit, self.act_limit)
-            target_q1, target_q2 = self.q_target([nobs, target_act], training=True)
-            actual_q = rew + (1-done) * self.gamma * tf.minimum(target_q1, target_q2)
-            pred_q1, pred_q2 = self.q([obs, act], training=True)
-            q_loss = tf.keras.losses.MSE(actual_q,pred_q1)+tf.keras.losses.MSE(actual_q,pred_q2)
+            nact = self.pi_target(nobs) + self.noise_obj()
+            nact = tf.clip_by_value(nact, -self.act_limit, self.act_limit)
+            next_q1, next_q2 = self.q_target([nobs, nact])
+            true_q = rew + (1-done) * self.gamma * tf.minimum(next_q1, next_q2)
+            pred_q1, pred_q2 = self.q([obs, act])
+            q_loss = tf.keras.losses.MSE(true_q, pred_q1)+tf.keras.losses.MSE(true_q, pred_q2)
         q_grad = tape.gradient(q_loss, self.q.trainable_variables)
         self.q_optimizer.apply_gradients(zip(q_grad, self.q.trainable_variables))
         """
@@ -146,8 +147,7 @@ class TD3:
         """
         if self.learn_iter % self.pi_learn_interval == 0:
             with tf.GradientTape() as tape:
-                pred_act = self.pi(obs, training=True)
-                pred_q1, pred_q2 = self.q([obs, pred_act], training=True)
+                pred_q1, pred_q2 = self.q([obs, self.pi(obs)])
                 pi_loss = -tf.math.reduce_mean(tf.minimum(pred_q1, pred_q2))
             pi_grad = tape.gradient(pi_loss, self.pi.trainable_variables)
             self.pi_optimizer.apply_gradients(zip(pi_grad, self.pi.trainable_variables))

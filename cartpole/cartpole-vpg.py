@@ -35,7 +35,7 @@ if __name__ == '__main__':
 
     ep_ret_list, avg_ret_list = [], []
     t, update_after = 0, 2500
-    total_episodes, ep_max_steps = 1000, 500
+    total_episodes, ep_max_steps = 500, 500
     for ep in range(total_episodes):
         done, ep_ret, step = False, 0, 0
         state = env.reset()

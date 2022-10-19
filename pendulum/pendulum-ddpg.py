@@ -33,8 +33,8 @@ if __name__ == '__main__':
 
     noise = OUNoise(mu=np.zeros(act_dim),sigma=float(0.2)*np.ones(act_dim))
     buffer = ReplayBuffer(obs_dim,act_dim,capacity=50000,batch_size=64)
-    hidden_sizes=[256,256]
-    agent = DDPG(obs_dim,act_dim,hidden_sizes,act_limit,gamma=0.99,polyak=0.995,pi_lr=1e-3,q_lr=2e-3,noise_obj=noise)
+    hidden_sizes=[200,200]
+    agent = DDPG(obs_dim,act_dim,hidden_sizes,act_limit,gamma=0.99,polyak=0.995,pi_lr=1e-3,q_lr=2e-3)
 
     ep_ret_list, avg_ret_list = [], []
     t, start_steps, update_after = 0, 1000, 500
@@ -44,7 +44,7 @@ if __name__ == '__main__':
         state = env.reset()
         while not done and step < ep_max_steps:
             if t > start_steps: # trick for improving exploration
-                a = agent.policy(state[0])
+                a = agent.policy(state[0], noise())
             else:
                 a = env.action_space.sample()
             new_state = env.step(a)

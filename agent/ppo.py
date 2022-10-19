@@ -135,7 +135,7 @@ class PPO:
             J' = E[J - c1*(V(s)-V_target)^2 +c2*H(s,pi(.))]
         """
         with tf.GradientTape() as tape:
-            logits=self.pi(obs,training=True)
+            logits=self.pi(obs)
             logp = tfp.distributions.Categorical(logits=logits).log_prob(act)
             ratio = tf.exp(logp - old_logp) # pi/old_pi
             clip_adv = tf.clip_by_value(ratio, 1-self.clip_r, 1+self.clip_r)*adv
@@ -152,8 +152,7 @@ class PPO:
         Fit value network
         """
         with tf.GradientTape() as tape:
-            val = self.q(obs, training=True)
-            q_loss = tf.keras.losses.MSE(ret, val)
+            q_loss = tf.keras.losses.MSE(ret, self.q(obs))
         q_grad = tape.gradient(q_loss, self.q.trainable_variables)
         for _ in range(q_iter):
             self.q_optimizer.apply_gradients(zip(q_grad, self.q.trainable_variables))

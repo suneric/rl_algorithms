@@ -108,14 +108,13 @@ class DQN:
         """
         with tf.GradientTape() as tape:
             # compute current Q
-            val = self.q(obs,training=True)
             oh_act = tf.one_hot(act,depth=self.act_dim)
-            pred_q = tf.math.reduce_sum(val*oh_act,axis=-1)
+            pred_q = tf.math.reduce_sum(self.q(obs)*oh_act,axis=-1)
             # compute target Q
-            nval= self.q_stable(nobs)
-            oh_nact = tf.one_hot(tf.math.argmax(self.q(nobs,training=True),axis=-1),depth=self.act_dim)
-            actual_q = rew+(1-done)*self.gamma*tf.math.reduce_sum(nval*oh_nact,axis=-1)
-            loss = tf.keras.losses.MSE(actual_q, pred_q)
+            oh_nact = tf.one_hot(tf.math.argmax(self.q(nobs),axis=-1),depth=self.act_dim)
+            next_q = tf.math.reduce_sum(self.q_stable(nobs)*oh_nact,axis=-1)
+            true_q = rew + (1-done) * self.gamma * next_q
+            loss = tf.keras.losses.MSE(true_q, pred_q)
         grad = tape.gradient(loss, self.q.trainable_variables)
         self.optimizer.apply_gradients(zip(grad, self.q.trainable_variables))
 
