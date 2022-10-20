@@ -107,6 +107,7 @@ class DQN:
         Q*(s,a) = E [r + gamma*max(Q*(s',a'))]
         """
         with tf.GradientTape() as tape:
+            tape.watch(self.q.trainable_variables)
             # compute current Q
             oh_act = tf.one_hot(act,depth=self.act_dim)
             pred_q = tf.math.reduce_sum(self.q(obs)*oh_act,axis=-1)

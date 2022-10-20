@@ -4,6 +4,7 @@ from plotly.subplots import make_subplots
 import numpy as np
 import argparse
 import csv
+import os, sys
 
 def smoothTriangle(data, degree):
     triangle=np.concatenate((np.arange(degree + 1), np.arange(degree)[::-1])) # up then down
@@ -26,26 +27,38 @@ def smoothExponential(data, weight):
         last = smoothed_val                                  # Anchor the last smoothed value
     return smoothed
 
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dir', type=str, default=None)
+    parser.add_argument('--env', type=str, default=None)
+    return parser.parse_args()
+
 if __name__ == "__main__":
-    dqn_csv = pd.read_csv('./lunarlander/dqn.csv')
-    ddpg_csv = pd.read_csv('./lunarlander/ddpg.csv')
-    td3_csv = pd.read_csv('./lunarlander/td3.csv')
-    sac_csv = pd.read_csv('./lunarlander/sac.csv')
-    ppo_csv = pd.read_csv('./lunarlander/ppo.csv')
-    vpg_csv = pd.read_csv('./lunarlander/vpg.csv')
+    args = get_args()
+
+    data_dir = os.path.join(args.dir, args.env)
+    data_list = []
+    for file in os.listdir(data_dir):
+        if os.path.isdir(os.path.join(data_dir, file)):
+            continue
+
+        policy_name = os.path.splitext(file)[0]
+        policy_csv = pd.read_csv(os.path.join(data_dir,file))
+        data_list.append((policy_name, policy_csv))
+    print("found {} records".format(len(data_list)))
+
+    color_list = ['#0075DC','#191919','#00998F','#50EBEC','#FFA405','#FF0180']
 
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x = dqn_csv['Step'], y = smoothExponential(dqn_csv['Value'],0.99),name='DQN', marker=dict(color='#0075DC')))
-    fig.add_trace(go.Scatter(x = ddpg_csv['Step'], y = smoothExponential(ddpg_csv['Value'],0.99),name='DDPG', marker=dict(color='#191919')))
-    fig.add_trace(go.Scatter(x = td3_csv['Step'], y = smoothExponential(td3_csv['Value'],0.99),name='TD3', marker=dict(color='#00998F')))
-    fig.add_trace(go.Scatter(x = sac_csv['Step'], y = smoothExponential(sac_csv['Value'],0.99),name='SAC', marker=dict(color='#50EBEC')))
-    fig.add_trace(go.Scatter(x = ppo_csv['Step'], y = smoothExponential(ppo_csv['Value'],0.99),name='PPO', marker=dict(color='#FFA405')))
-    fig.add_trace(go.Scatter(x = vpg_csv['Step'], y = smoothExponential(vpg_csv['Value'],0.99),name='VPG', marker=dict(color='#FF0180')))
+    for i in range(len(data_list)):
+        policy, record = data_list[i][0], data_list[i][1]
+        fig.add_trace(go.Scatter(x = record['Step'], y = smoothExponential(record['Value'],0.99),name=policy, marker=dict(color=color_list[i])))
+
     fig.update_layout(
-        title="LunarLander RL Training Performance",
+        title="{} RL Training Performance".format(args.env),
         xaxis_title="Episodes",
         yaxis_title="Total Reward",
-        legend_title="PPO Policies",
+        legend_title="Algorithm",
         font=dict(
             family="Arial",
             size=20,

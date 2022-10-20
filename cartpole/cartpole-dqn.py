@@ -33,14 +33,14 @@ if __name__ == '__main__':
     agent = DQN(obs_dim,act_dim,hidden_sizes=[32,32],gamma=0.99,lr=2e-4,update_freq=500)
 
     ep_ret_list, avg_ret_list = [], []
-    epsilon, epsilon_stop, decay = 0.99, 0.1, 0.995
-    t, update_after = 0, 2500
-    total_episodes, ep_max_steps = 500, 500
+    epsilon, epsilon_stop, decay = 0.99, 0.1, 0.99
+    t, update_after = 0, 1e3
+    total_episodes, max_ep_steps = 500, 500
     for ep in range(total_episodes):
         epsilon = max(epsilon_stop, epsilon*decay)
         done, ep_ret, step = False, 0, 0
         state = env.reset()
-        while not done and step < ep_max_steps:
+        while not done and step < max_ep_steps:
             a = agent.policy(state[0], epsilon)
             new_state = env.step(a)
             r, done = new_state[1], new_state[2]
@@ -50,7 +50,7 @@ if __name__ == '__main__':
             step += 1
             t += 1
 
-            if buffer.ptr > update_after:
+            if t > update_after:
                 agent.learn(buffer)
 
         with summaryWriter.as_default():
@@ -59,7 +59,7 @@ if __name__ == '__main__':
         ep_ret_list.append(ep_ret)
         avg_ret = np.mean(ep_ret_list[-40:])
         avg_ret_list.append(avg_ret)
-        print("Episode *{}* average reward is {}, total steps {}".format(ep, avg_ret, t))
+        print("Episode *{}* average reward is {:.4f}, episode length {}".format(ep, avg_ret, step))
 
     env.close()
 

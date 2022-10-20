@@ -5,24 +5,24 @@ from copy import deepcopy
 from .core import *
 
 def actor_model(obs_dim, act_dim, hidden_sizes, activation, act_limit):
-    last_init = tf.random_uniform_initializer(minval=-3e-3, maxval=3e-3)
     input = layers.Input(shape=(obs_dim,))
     x = layers.Dense(hidden_sizes[0], activation=activation)(input)
     for i in range(1, len(hidden_sizes)):
         x = layers.Dense(hidden_sizes[i], activation=activation)(x)
-    output = layers.Dense(act_dim, activation="tanh", kernel_initializer=last_init)(x)
+    output = layers.Dense(act_dim, activation="tanh")(x)
     output = output * act_limit
     model = tf.keras.Model(input, output)
     return model
 
 def critic_model(obs_dim, act_dim, hidden_sizes, activation):
-    obs_input = layers.Input(shape=(obs_dim))
-    act_input = layers.Input(shape=(act_dim))
-    x = layers.Concatenate()([obs_input, act_input])
-    for i in range(len(hidden_sizes)):
+    obs_input = tf.keras.Input(shape=(obs_dim,))
+    act_input = tf.keras.Input(shape=(act_dim,))
+    input = layers.Concatenate()([obs_input, act_input])
+    x = layers.Dense(hidden_sizes[0], activation=activation)(input)
+    for i in range(1, len(hidden_sizes)):
         x = layers.Dense(hidden_sizes[i], activation=activation)(x)
     output = layers.Dense(1, activation='linear')(x)
-    model = tf.keras.Model([obs_input, act_input], output)
+    model = tf.keras.Model([obs_input,act_input], output)
     return model
 
 class ReplayBuffer:
@@ -38,8 +38,8 @@ class ReplayBuffer:
         self.obs_buf = np.zeros((capacity, obs_dim),dtype=np.float32)
         self.nobs_buf = np.zeros((capacity, obs_dim),dtype=np.float32)
         self.act_buf = np.zeros((capacity, act_dim), dtype=np.float32)
-        self.rew_buf = np.zeros(capacity, dtype=np.float32)
-        self.done_buf = np.zeros(capacity, dtype=np.float32)
+        self.rew_buf = np.zeros((capacity,1), dtype=np.float32)
+        self.done_buf = np.zeros((capacity,1), dtype=np.float32)
         self.ptr, self.size, self.max_size = 0, 0, capacity
         self.batch_size = batch_size
 
@@ -104,7 +104,7 @@ class DDPG:
         state = tf.expand_dims(tf.convert_to_tensor(obs),0)
         sampled_acts = tf.squeeze(self.pi(state)).numpy()
         if noise is not None:
-            sampled_acts += noise
+            sampled_acts += tf.squeeze(noise)
         legal_act = np.clip(sampled_acts, -self.act_limit, self.act_limit)
         return legal_act
 
@@ -125,9 +125,10 @@ class DDPG:
         L_p = E [(Q_p(s,a) - (r + gamma x Q_q(s', u_q(s'))))^2]
         """
         with tf.GradientTape() as tape:
+            tape.watch(self.q.trainable_variables)
+            pred_q = self.q([obs, act])
             next_q = self.q_target([nobs, self.pi_target(nobs)])
             true_q = rew + (1-done) * self.gamma * next_q
-            pred_q = self.q([obs, act])
             q_loss = tf.keras.losses.MSE(true_q, pred_q)
         q_grad = tape.gradient(q_loss, self.q.trainable_variables)
         self.q_optimizer.apply_gradients(zip(q_grad, self.q.trainable_variables))
@@ -139,6 +140,7 @@ class DDPG:
         to solve max(E [Q(s, u(s))])
         """
         with tf.GradientTape() as tape:
+            tape.watch(self.pi.trainable_variables)
             pred_q = self.q([obs, self.pi(obs)])
             pi_loss = -tf.math.reduce_mean(pred_q)
         pi_grad = tape.gradient(pi_loss, self.pi.trainable_variables)

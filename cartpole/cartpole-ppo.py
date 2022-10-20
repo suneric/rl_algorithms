@@ -34,12 +34,12 @@ if __name__ == '__main__':
     agent = PPO(obs_dim,act_dim,hidden_sizes=[32,32],pi_lr=1e-4,q_lr=2e-4,clip_ratio=0.2,beta=1e-3,target_kld=1e-2)
 
     ep_ret_list, avg_ret_list = [], []
-    t, update_after = 0, 2500
-    total_episodes, ep_max_steps = 500, 500
+    t, update_after = 0, 1e3
+    total_episodes, max_ep_steps = 500, 500
     for ep in range(total_episodes):
         done, ep_ret, step = False, 0, 0
         state = env.reset()
-        while not done and step < ep_max_steps:
+        while not done and step < max_ep_steps:
             a, logp = agent.policy(state[0])
             value = agent.value(state[0])
             new_state = env.step(a)
@@ -61,7 +61,7 @@ if __name__ == '__main__':
         ep_ret_list.append(ep_ret)
         avg_ret = np.mean(ep_ret_list[-40:])
         avg_ret_list.append(avg_ret)
-        print("Episode *{}* average reward is {}, total steps {}".format(ep, avg_ret, t))
+        print("Episode *{}* average reward is {:.4f}, episode length {}".format(ep, avg_ret, step))
 
     env.close()
 

@@ -43,8 +43,8 @@ class ReplayBuffer:
         self.obs_buf = np.zeros((capacity, obs_dim),dtype=np.float32)
         self.nobs_buf = np.zeros((capacity, obs_dim),dtype=np.float32)
         self.act_buf = np.zeros((capacity, act_dim), dtype=np.float32)
-        self.rew_buf = np.zeros(capacity, dtype=np.float32)
-        self.done_buf = np.zeros(capacity, dtype=np.float32)
+        self.rew_buf = np.zeros((capacity,1), dtype=np.float32)
+        self.done_buf = np.zeros((capacity,1), dtype=np.float32)
         self.ptr, self.size, self.max_size = 0, 0, capacity
         self.batch_size = batch_size
 
@@ -111,7 +111,7 @@ class TD3:
         state = tf.expand_dims(tf.convert_to_tensor(obs),0)
         sampled_acts = tf.squeeze(self.pi(state)).numpy()
         if noise is not None:
-            sampled_acts += noise
+            sampled_acts += tf.squeeze(noise)
         legal_act = np.clip(sampled_acts, -self.act_limit, self.act_limit)
         return legal_act
 
@@ -134,6 +134,7 @@ class TD3:
             Trick 3: add noise to the target action, making it harder for the policy to
             exploit Q-function errors by smoothing out Q along changes in action.
             """
+            tape.watch(self.q.trainable_variables)
             nact = self.pi_target(nobs) + self.noise_obj()
             nact = tf.clip_by_value(nact, -self.act_limit, self.act_limit)
             next_q1, next_q2 = self.q_target([nobs, nact])
@@ -147,6 +148,7 @@ class TD3:
         """
         if self.learn_iter % self.pi_learn_interval == 0:
             with tf.GradientTape() as tape:
+                tape.watch(self.pi.trainable_variables)
                 pred_q1, pred_q2 = self.q([obs, self.pi(obs)])
                 pi_loss = -tf.math.reduce_mean(tf.minimum(pred_q1, pred_q2))
             pi_grad = tape.gradient(pi_loss, self.pi.trainable_variables)

@@ -32,30 +32,26 @@ if __name__ == '__main__':
     print("state {}, action {}, limit {}".format(obs_dim,act_dim,act_limit))
 
     buffer = ReplayBuffer(obs_dim,act_dim,capacity=50000,batch_size=64)
-    hidden_sizes = [200,200]
-    agent = SAC(obs_dim,act_dim,hidden_sizes,act_limit,
-        gamma=0.99,polyak=0.995,pi_lr=1e-4,q_lr=2e-4,alpha_lr=1e-4,alpha=0.2,auto_ent=True)
+    agent = SAC(obs_dim,act_dim,hidden_sizes=[256,256],
+        act_limit=act_limit,gamma=0.99,polyak=0.995,pi_lr=2e-4,q_lr=3e-4,alpha_lr=5e-4,alpha=0.2,auto_ent=True)
 
     ep_ret_list, avg_ret_list = [], []
-    t, start_steps, update_after, update_freq = 0, 5000, 500, 50
-    total_episodes, ep_max_steps = 300, 200
+    t, warmup_steps, update_after = 0, 1e4, 1e3
+    total_episodes, max_ep_steps = 500, 200
     for ep in range(total_episodes):
         done, ep_ret, step = False, 0, 0
         state = env.reset()
-        while not done and step < ep_max_steps:
-            if t > start_steps:  # trick for better exploration
-                a = [agent.policy(state[0])]
-            else:
-                a = env.action_space.sample()
+        while not done and step < max_ep_steps:
+            a = [agent.policy(state[0])] if t > warmup_steps else env.action_space.sample()
             new_state = env.step(a)
-            r, done = new_state[1], new_state[2]
-            buffer.store(state[0],a,r,new_state[0],done)
-            t += 1
-            step += 1
-            ep_ret += r
+            r, done, stop = new_state[1], new_state[2], new_state[3]
+            buffer.store(state[0],a,r,new_state[0],0) # no done
             state = new_state
+            ep_ret += r
+            step += 1
+            t += 1
 
-            if t > update_after and t % update_freq == 0:
+            if t > update_after:
                 agent.learn(buffer)
 
         with summaryWriter.as_default():
@@ -64,7 +60,7 @@ if __name__ == '__main__':
         ep_ret_list.append(ep_ret)
         avg_ret = np.mean(ep_ret_list[-40:])
         avg_ret_list.append(avg_ret)
-        print("Episode *{}* average reward is {}, total steps {}".format(ep, avg_ret, t))
+        print("Episode *{}* average reward is {:.4f}, episode length {}".format(ep, avg_ret, step))
 
     env.close()
 

@@ -129,7 +129,9 @@ class VPG:
         variance as well.
         """
         with tf.GradientTape() as tape:
-            logp = tfp.distributions.Categorical(logits=self.pi(obs)).log_prob(act)
+            tape.watch(self.pi.trainable_variables)
+            logits = self.pi(obs)
+            logp = tfp.distributions.Categorical(logits=logits).log_prob(act)
             approx_kld = old_logp-logp
             pi_loss = -tf.reduce_mean(logp*adv)
         pi_grad = tape.gradient(pi_loss, self.pi.trainable_variables)
@@ -141,7 +143,9 @@ class VPG:
         Fit value network
         """
         with tf.GradientTape() as tape:
-            q_loss = tf.keras.losses.MSE(ret, self.q(obs))
+            tape.watch(self.q.trainable_variables)
+            pred_q = self.q(obs)
+            q_loss = tf.keras.losses.MSE(ret, pred_q)
         q_grad = tape.gradient(q_loss, self.q.trainable_variables)
         for _ in range(iter):
             self.q_optimizer.apply_gradients(zip(q_grad, self.q.trainable_variables))

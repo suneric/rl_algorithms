@@ -43,8 +43,8 @@ class ReplayBuffer:
         self.obs_buf = np.zeros((capacity, obs_dim),dtype=np.float32)
         self.nobs_buf = np.zeros((capacity, obs_dim),dtype=np.float32)
         self.act_buf = np.zeros((capacity, act_dim), dtype=np.float32)
-        self.rew_buf = np.zeros(capacity, dtype=np.float32)
-        self.done_buf = np.zeros(capacity, dtype=np.float32)
+        self.rew_buf = np.zeros((capacity,1), dtype=np.float32)
+        self.done_buf = np.zeros((capacity,1), dtype=np.float32)
         self.ptr, self.size, self.max_size = 0, 0, capacity
         self.batch_size = batch_size
 
