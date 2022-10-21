@@ -35,6 +35,17 @@ def discount_cumsum(x,discount):
     """
     return scipy.signal.lfilter([1], [1, float(-discount)], x[::-1], axis=0)[::-1]
 
+def logprobabilities(logits, action, action_dim):
+    """
+    Compute the log-probabilities of taking actions a by using the logits
+    (i.e. the output of the actor)
+    """
+    logprobabilities_all = tf.nn.log_softmax(logits)
+    logprobability = tf.reduce_sum(
+        tf.one_hot(action, action_dim) * logprobabilities_all, axis=1
+    )
+    return logprobability
+
 class GSNoise:
     """
     Gaussian Noise added to Action for better exploration

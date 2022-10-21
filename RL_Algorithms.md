@@ -163,23 +163,19 @@ A central feature of SAC is **entropy regularization**. The policy is trained to
 
 
 ## Performance Comparison
+Environment: CartPole-v1, discrete action space
+<p align="center">
+<img src="https://github.com/suneric/rl_algorithms/blob/main/references/training_performance_cartpole.png" width=100% height=100%>
+</p>
+
+Environment: Pendulum-v1, continuous action space
+<p align="center">
+<img src="https://github.com/suneric/rl_algorithms/blob/main/references/training_performance_pendulum.png" width=100% height=100%>
+</p>
 
 Environment: LunarLander-v2, continuous and discrete action space
-Configuration:
-- hidden layers: [256, 256, 256]
-- discount: $\gamma$ = 0.99
-- policy $\pi$ learning rate = 1e-4
-- Q-function learning rate = 2e-4
-- polyak = 0.995 (or $\tau$ = 0.005)
-- buffer capacity: 100000
-- batch size: 64
-- target_kl: 0.01
-- total episode count: 1000
-- start steps: 10000
-- max steps per episode: 500
-
 <p align="center">
-<img src="https://github.com/suneric/rl_algorithms/blob/main/references/training_performance.png" width=100% height=100%>
+<img src="https://github.com/suneric/rl_algorithms/blob/main/references/training_performance_lunarlander.png" width=100% height=100%>
 </p>
 
 ## References

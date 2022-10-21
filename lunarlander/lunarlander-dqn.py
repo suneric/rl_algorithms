@@ -29,13 +29,13 @@ if __name__ == '__main__':
     act_dim = env.action_space.n
     print("state {}, action {}".format(obs_dim,act_dim))
 
-    buffer = ReplayBuffer(obs_dim,act_dim,capacity=50000,batch_size=64)
-    agent = DQN(obs_dim,act_dim,hidden_sizes=[512,512],gamma=0.99,lr=2e-4,update_freq=500)
+    buffer = ReplayBuffer(obs_dim,act_dim,capacity=50000,batch_size=128)
+    agent = DQN(obs_dim,act_dim,hidden_sizes=[400,400],gamma=0.99,lr=2e-4,update_freq=500)
 
     ep_ret_list, avg_ret_list = [], []
     epsilon, epsilon_stop, decay = 0.99, 0.1, 0.99
     t, update_after = 0, 1e3
-    total_episodes, max_ep_steps = 500, 1000
+    total_episodes, max_ep_steps = 500, 800
     for ep in range(total_episodes):
         epsilon = max(epsilon_stop, epsilon*decay)
         done, ep_ret, step = False, 0, 0
@@ -57,7 +57,7 @@ if __name__ == '__main__':
             tf.summary.scalar('episode reward', ep_ret, step=ep)
 
         ep_ret_list.append(ep_ret)
-        avg_ret = np.mean(ep_ret_list[-40:])
+        avg_ret = np.mean(ep_ret_list[-30:])
         avg_ret_list.append(avg_ret)
         print("Episode *{}* average reward is {:.4f}, episode length {}".format(ep, avg_ret, step))
 

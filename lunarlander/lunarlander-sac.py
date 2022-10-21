@@ -31,13 +31,13 @@ if __name__ == '__main__':
     act_limit = env.action_space.high[0]
     print("state {}, action {}, limit {}".format(obs_dim,act_dim,act_limit))
 
-    buffer = ReplayBuffer(obs_dim,act_dim,capacity=50000,batch_size=64)
-    agent = SAC(obs_dim,act_dim,hidden_sizes=[512,512],
-        act_limit=act_limit,gamma=0.99,polyak=0.995,pi_lr=2e-4,q_lr=3e-4,alpha_lr=5e-4,alpha=0.2,auto_ent=True)
+    buffer = ReplayBuffer(obs_dim,act_dim,capacity=100000,batch_size=64)
+    agent = SAC(obs_dim,act_dim,hidden_sizes=[400,400],
+        act_limit=act_limit,gamma=0.99,polyak=0.995,pi_lr=1e-4,q_lr=2e-4,alpha_lr=1e-4,alpha=0.1)
 
     ep_ret_list, avg_ret_list = [], []
     t, warmup_steps, update_after = 0, 1e4, 1e3
-    total_episodes, max_ep_steps = 500, 1000
+    total_episodes, max_ep_steps = 500, 800
     for ep in range(total_episodes):
         done, ep_ret, step = False, 0, 0
         state = env.reset()
@@ -58,7 +58,7 @@ if __name__ == '__main__':
             tf.summary.scalar('episode reward', ep_ret, step=ep)
 
         ep_ret_list.append(ep_ret)
-        avg_ret = np.mean(ep_ret_list[-40:])
+        avg_ret = np.mean(ep_ret_list[-30:])
         avg_ret_list.append(avg_ret)
         print("Episode *{}* average reward is {:.4f}, episode length {}".format(ep, avg_ret, step))
 

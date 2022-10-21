@@ -116,12 +116,12 @@ class TD3:
         return legal_act
 
     def learn(self, buffer):
-        sampled_batch = buffer.sample()
-        obs_batch = sampled_batch['obs']
-        nobs_batch = sampled_batch['nobs']
-        act_batch = sampled_batch['act']
-        rew_batch = sampled_batch['rew']
-        done_batch = sampled_batch['done']
+        experiences = buffer.sample()
+        obs_batch = experiences['obs']
+        nobs_batch = experiences['nobs']
+        act_batch = experiences['act']
+        rew_batch = experiences['rew']
+        done_batch = experiences['done']
         self.update(obs_batch, act_batch, rew_batch, nobs_batch, done_batch)
 
     def update(self, obs, act, rew, nobs, done):
@@ -138,7 +138,7 @@ class TD3:
             nact = self.pi_target(nobs) + self.noise_obj()
             nact = tf.clip_by_value(nact, -self.act_limit, self.act_limit)
             next_q1, next_q2 = self.q_target([nobs, nact])
-            true_q = rew + (1-done) * self.gamma * tf.minimum(next_q1, next_q2)
+            true_q = rew + (1-done) * self.gamma * tf.math.minimum(next_q1, next_q2)
             pred_q1, pred_q2 = self.q([obs, act])
             q_loss = tf.keras.losses.MSE(true_q, pred_q1)+tf.keras.losses.MSE(true_q, pred_q2)
         q_grad = tape.gradient(q_loss, self.q.trainable_variables)
@@ -150,7 +150,7 @@ class TD3:
             with tf.GradientTape() as tape:
                 tape.watch(self.pi.trainable_variables)
                 pred_q1, pred_q2 = self.q([obs, self.pi(obs)])
-                pi_loss = -tf.math.reduce_mean(tf.minimum(pred_q1, pred_q2))
+                pi_loss = -tf.math.reduce_mean(tf.math.minimum(pred_q1, pred_q2))
             pi_grad = tape.gradient(pi_loss, self.pi.trainable_variables)
             self.pi_optimizer.apply_gradients(zip(pi_grad, self.pi.trainable_variables))
             # update target network with same parameters

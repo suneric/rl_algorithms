@@ -88,10 +88,9 @@ class PPO:
         self.q = mlp_net(obs_dim,1,hidden_sizes,'relu','linear')
         self.pi_optimizer = tf.keras.optimizers.Adam(pi_lr)
         self.q_optimizer = tf.keras.optimizers.Adam(q_lr)
-        self.act_dim = act_dim
         self.clip_r = clip_ratio
-        self.beta = beta
         self.target_kld = target_kld
+        self.beta = beta
 
     def policy(self, obs):
         """
@@ -140,22 +139,22 @@ class PPO:
             logp = tfp.distributions.Categorical(logits=logits).log_prob(act)
             ratio = tf.exp(logp - old_logp) # pi/old_pi
             clip_adv = tf.clip_by_value(ratio, 1-self.clip_r, 1+self.clip_r)*adv
-            approx_kld = old_logp-logp
             pmf = tf.nn.softmax(logits=logits) # probability
             ent = tf.math.reduce_sum(-pmf*tf.math.log(pmf),axis=-1) # entropy
             pi_loss = -tf.math.reduce_mean(tf.math.minimum(ratio*adv, clip_adv)) + self.beta*ent
         pi_grad = tape.gradient(pi_loss, self.pi.trainable_variables)
         for _ in range(pi_iter):
             self.pi_optimizer.apply_gradients(zip(pi_grad, self.pi.trainable_variables))
-            if tf.math.reduce_mean(approx_kld) > self.target_kld:
+            logp = tfp.distributions.Categorical(logits=self.pi(obs)).log_prob(act)
+            approx_kld = tf.reduce_mean(old_logp-logp)
+            if approx_kld > 1.5*self.target_kld:
                 break
         """
         Fit value network
         """
         with tf.GradientTape() as tape:
             tape.watch(self.q.trainable_variables)
-            pred_q = self.q(obs)
-            q_loss = tf.keras.losses.MSE(ret, pred_q)
+            q_loss = tf.keras.losses.MSE(ret, self.q(obs))
         q_grad = tape.gradient(q_loss, self.q.trainable_variables)
         for _ in range(q_iter):
             self.q_optimizer.apply_gradients(zip(q_grad, self.q.trainable_variables))

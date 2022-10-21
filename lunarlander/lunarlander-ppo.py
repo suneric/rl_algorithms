@@ -31,11 +31,11 @@ if __name__ == '__main__':
     print("state {}, action {}".format(obs_dim, act_dim))
 
     buffer = ReplayBuffer(obs_dim,act_dim,capacity=50000,gamma=0.99,lamda=0.97)
-    agent = PPO(obs_dim,act_dim,hidden_sizes=[512,512],pi_lr=1e-4,q_lr=2e-4,clip_ratio=0.2,beta=1e-3,target_kld=1e-2)
+    agent = PPO(obs_dim,act_dim,hidden_sizes=[400,400],pi_lr=1e-4,q_lr=1e-3,clip_ratio=0.2,beta=1e-3,target_kld=1e-2)
 
     ep_ret_list, avg_ret_list = [], []
-    t, update_after = 0, 1e3
-    total_episodes, max_ep_steps = 500, 1000
+    t, update_after = 0, 2500
+    total_episodes, max_ep_steps = 500, 800
     for ep in range(total_episodes):
         done, ep_ret, step = False, 0, 0
         state = env.reset()
@@ -52,14 +52,14 @@ if __name__ == '__main__':
 
         last_value = 0 if done else agent.value(state[0])
         buffer.finish_trajectory(last_value)
-        if buffer.ptr > update_after:
+        if buffer.ptr > update_after or ep+1 == total_episodes:
             agent.learn(buffer)
 
         with summaryWriter.as_default():
             tf.summary.scalar('episode reward', ep_ret, step=ep)
 
         ep_ret_list.append(ep_ret)
-        avg_ret = np.mean(ep_ret_list[-40:])
+        avg_ret = np.mean(ep_ret_list[-30:])
         avg_ret_list.append(avg_ret)
         print("Episode *{}* average reward is {:.4f}, episode length {}".format(ep, avg_ret, step))
 

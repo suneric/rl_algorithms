@@ -109,12 +109,12 @@ class DDPG:
         return legal_act
 
     def learn(self, buffer):
-        sampled_batch = buffer.sample()
-        obs_batch = sampled_batch['obs']
-        nobs_batch = sampled_batch['nobs']
-        act_batch = sampled_batch['act']
-        rew_batch = sampled_batch['rew']
-        done_batch = sampled_batch['done']
+        experiences = buffer.sample()
+        obs_batch = experiences['obs']
+        nobs_batch = experiences['nobs']
+        act_batch = experiences['act']
+        rew_batch = experiences['rew']
+        done_batch = experiences['done']
         self.update(obs_batch, act_batch, rew_batch, nobs_batch, done_batch)
 
     def update(self, obs, act, rew, nobs, done):
