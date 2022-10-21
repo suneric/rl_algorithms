@@ -32,13 +32,13 @@ if __name__ == '__main__':
     print("state {}, action {}, limit {}".format(obs_dim,act_dim,act_limit))
 
     noise = OUNoise(mu=np.zeros(act_dim),sigma=float(0.2)*np.ones(act_dim))
-    buffer = ReplayBuffer(obs_dim,act_dim,capacity=100000,batch_size=64)
+    buffer = ReplayBuffer(obs_dim,act_dim,capacity=50000,batch_size=64)
     agent = DDPG(obs_dim,act_dim,hidden_sizes=[400,400],
         act_limit=act_limit,gamma=0.99,polyak=0.995,pi_lr=1e-4,q_lr=2e-4)
 
     ep_ret_list, avg_ret_list = [], []
     t, warmup_steps, update_after = 0, 1e4, 1e3
-    total_episodes, max_ep_steps = 500, 800
+    total_episodes, max_ep_steps = 500, 500
     for ep in range(total_episodes):
         done, ep_ret, step = False, 0, 0
         state = env.reset()

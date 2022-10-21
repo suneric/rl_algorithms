@@ -29,8 +29,7 @@ $$log P(\tau|\theta) = log \rho_0(s_0) + \sum_{t=0,T}(log P(s_{t+1}|s_t,a_t) + l
 4. **Gradients of Environment Functions**. The environment has no dependence on $\theta$, so gradients of $\rho_0(s_0)$, $P(s_{t+1}|s_t,a_t)$ and $R(\tau)$ are zero.
 5. **Grad-Log-Prob of a Trajectory**. The gradient of the log-prob of a trajectory is thus
 $$\nabla_{\theta}log P(\tau|\theta) = \sum_{t=0,T} \nabla_{\theta}log \pi_{\theta}(a_t|s_t)$$
-This is an expectation, which means that we can estimate it with a sample mean. If we collect a set of trajectory $\mathbb{D} = {\tau_i}_{i=1,...,N}$
-where each trajectory is obtained by letting the agent act in the environment using the policy $\pi_{\theta}$, the policy gradient can be estimated with
+This is an expectation, which means that we can estimate it with a sample mean. If we collect a set of trajectory $\mathbb{D} = \tau_i$, i = {1,...,N}, where each trajectory is obtained by letting the agent act in the environment using the policy $\pi_{\theta}$, the policy gradient can be estimated with
 
 $$\hat{g} = \frac{1}{|\mathbb{D}|}\sum_{\tau \in \mathbb{D}}\sum_{t=0,T}\nabla_{\theta}log\pi_{\theta}(a_t|s_t)R(\tau)$$
 

@@ -35,7 +35,7 @@ if __name__ == '__main__':
     ep_ret_list, avg_ret_list = [], []
     epsilon, epsilon_stop, decay = 0.99, 0.1, 0.99
     t, update_after = 0, 1e3
-    total_episodes, max_ep_steps = 500, 800
+    total_episodes, max_ep_steps = 500, 500
     for ep in range(total_episodes):
         epsilon = max(epsilon_stop, epsilon*decay)
         done, ep_ret, step = False, 0, 0
