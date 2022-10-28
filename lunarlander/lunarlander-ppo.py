@@ -30,11 +30,11 @@ if __name__ == '__main__':
     act_dim = env.action_space.n
     print("state {}, action {}".format(obs_dim, act_dim))
 
-    buffer = ReplayBuffer(obs_dim,act_dim,capacity=50000,gamma=0.99,lamda=0.97)
-    agent = PPO(obs_dim,act_dim,hidden_sizes=[400,400],pi_lr=1e-4,q_lr=1e-3,clip_ratio=0.2,beta=1e-3,target_kld=1e-2)
+    buffer = ReplayBuffer(obs_dim,capacity=10000,gamma=0.99,lamda=0.97)
+    agent = PPO(obs_dim,act_dim,hidden_sizes=[400,400],pi_lr=3e-4,q_lr=1e-3,clip_ratio=0.2,beta=1e-3,target_kld=0.01)
 
     ep_ret_list, avg_ret_list = [], []
-    t, update_after = 0, 2500
+    t, update_after = 0, 1e3
     total_episodes, max_ep_steps = 500, 500
     for ep in range(total_episodes):
         done, ep_ret, step = False, 0, 0

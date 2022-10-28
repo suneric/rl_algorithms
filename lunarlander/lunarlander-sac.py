@@ -33,10 +33,10 @@ if __name__ == '__main__':
 
     buffer = ReplayBuffer(obs_dim,act_dim,capacity=50000,batch_size=64)
     agent = SAC(obs_dim,act_dim,hidden_sizes=[400,400],
-        act_limit=act_limit,gamma=0.99,polyak=0.995,pi_lr=1e-4,q_lr=2e-4,alpha_lr=1e-4,alpha=0.1)
+        act_limit=act_limit,gamma=0.99,polyak=0.995,pi_lr=3e-4,q_lr=1e-3,alpha_lr=1e-4,alpha=0.1)
 
     ep_ret_list, avg_ret_list = [], []
-    t, warmup_steps, update_after = 0, 1e4, 1e3
+    t, warmup_steps, update_after = 0, 0, 0
     total_episodes, max_ep_steps = 500, 500
     for ep in range(total_episodes):
         done, ep_ret, step = False, 0, 0

@@ -150,7 +150,8 @@ class TD3:
             with tf.GradientTape() as tape:
                 tape.watch(self.pi.trainable_variables)
                 pred_q1, pred_q2 = self.q([obs, self.pi(obs)])
-                pi_loss = -tf.math.reduce_mean(tf.math.minimum(pred_q1, pred_q2))
+                val = pred_q1 #tf.math.minimum(pred_q1, pred_q2) 
+                pi_loss = -tf.math.reduce_mean(val)
             pi_grad = tape.gradient(pi_loss, self.pi.trainable_variables)
             self.pi_optimizer.apply_gradients(zip(pi_grad, self.pi.trainable_variables))
             # update target network with same parameters
