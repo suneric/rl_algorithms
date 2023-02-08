@@ -55,15 +55,20 @@ if __name__ == "__main__":
         fig.add_trace(go.Scatter(x = record['Step'], y = smoothExponential(record['Value'],0.99),name=policy, marker=dict(color=color_list[i])))
 
     fig.update_layout(
-        title="{} RL Training Performance".format(args.env),
+        title="Training Performance",
         xaxis_title="Episodes",
         yaxis_title="Total Reward",
-        legend_title="Algorithm",
+        legend_title="Vision Input",
         font=dict(
             family="Arial",
             size=20,
             color="Black"
         ),
-        plot_bgcolor="rgb(255,255,255)"
+        plot_bgcolor="rgb(255,255,255)",
+        xaxis = dict(
+        tickmode = 'array',
+        tickvals = [1000, 2000, 3000, 4000, 5000, 6000, 7000],
+        ticktext = ['1K', '2K', '3K', '4K', '5K', '6K', '7K']
+        )
     )
     fig.show()
