@@ -67,8 +67,8 @@ if __name__ == "__main__":
         plot_bgcolor="rgb(255,255,255)",
         xaxis = dict(
         tickmode = 'array',
-        tickvals = [1000, 2000, 3000, 4000, 5000, 6000, 7000],
-        ticktext = ['1K', '2K', '3K', '4K', '5K', '6K', '7K']
+        tickvals = [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000],
+        ticktext = ['1K', '2K', '3K', '4K', '5K', '6K', '7K', '8K', '9K', '10K']
         )
     )
     fig.show()
