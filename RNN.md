@@ -19,3 +19,4 @@ One of the most fundamental works, LSTM is the dominant architecture in RNNs.
 ## References
 [1] https://theaisummer.com/understanding-lstm/
 [2] https://npitsillos.github.io/blog/2021/recurrent-ppo/
+[3] https://kam.al/blog/ppo_stale_states/

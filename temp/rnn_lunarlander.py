@@ -116,7 +116,7 @@ class DQNAgent:
             grad = tape.gradient(loss, self.q.trainable_variables)
             self.optimizer.apply_gradients(zip(grad, self.q.trainable_variables))
             epoch_loss[i] = loss
-        print("learning mean loss: {:.4f}".format(np.mean(epoch_loss)))
+        #print("learning mean loss: {:.4f}".format(np.mean(epoch_loss)))
         if self.learn_iter % self.update_freq == 0:
             copy_network_variables(self.q_stable.trainable_variables, self.q.trainable_variables)
 
@@ -128,7 +128,7 @@ def dqn_train(env, max_eps=100):
     buffer = RolloutBuffer(obs_dim,50000,recurrent=False)
     agent = DQNAgent(model=m,gamma=0.99,lr=3e-4,update_freq=100,act_dim=act_dim)
     epsilon, epsilon_stop, decay = 1.0, 0.1, 0.99
-    t, update_after, max_steps = 0, 1e4, 200
+    t, update_after, max_steps = 0, 1e3, 500
     ep_returns, avg_returns = [], []
     for ep in range(max_eps):
         epsilon = max(epsilon_stop, epsilon*decay)
@@ -147,10 +147,9 @@ def dqn_train(env, max_eps=100):
             step += 1
             t += 1
             buffer.add_sample(o,a,r,o1,d)
+            if t > update_after:
+                agent.learn(buffer,batch_size=16,epoch=1)
         # update
-        if t > update_after:
-            for _ in range(20):
-                agent.learn(buffer,batch_size=32,epoch=10)
         ep_returns.append(ep_ret)
         avg_ret = np.mean(ep_returns[-20:])
         avg_returns.append(avg_ret)
@@ -173,10 +172,7 @@ class RDQNAgent:
             return np.random.randint(self.act_dim)
         else:
             dim = np.array(obs_seq).shape
-            if dim[0] < self.seq_len:
-                for _ in range(self.seq_len-dim[0]):
-                    obs_seq.appendleft(np.zeros(dim[1]))
-            digit = self.q(np.reshape(np.array(obs_seq),[1,self.seq_len,dim[1]]))
+            digit = self.q(np.reshape(np.array(obs_seq),[1,dim[0],dim[1]]))
             return np.argmax(digit)
 
     def learn(self,buffer,batch_size=32, epoch=1):
@@ -214,7 +210,7 @@ def rdqn_train(env,max_eps=100):
     buffer = RolloutBuffer(obs_dim,50000,recurrent=True)
     agent = RDQNAgent(model=m,gamma=0.99,lr=3e-4,update_freq=100,act_dim=act_dim,seq_len=seq_len)
     epsilon, epsilon_stop, decay = 1.0, 0.1, 0.99
-    t, update_after, max_steps = 0, 1e4, 200
+    t, update_after, max_steps = 0, 1e4, 500
     ep_returns, avg_returns = [], []
     for ep in range(max_eps):
         epsilon = max(epsilon_stop, epsilon*decay)
@@ -248,10 +244,147 @@ def rdqn_train(env,max_eps=100):
         print("{}th episodic total reward: {:.4f}, total steps {}".format(ep+1, avg_ret, t))
     return avg_returns
 
+class PPORolloutBuffer:
+    def __init__(self, obs_dim, capacity, gamma=0.99, lamda=0.95):
+        self.obs_buf = np.zeros((capacity, obs_dim), dtype=np.float32)
+        self.act_buf = np.zeros(capacity, dtype=np.int32)
+        self.rew_buf = np.zeros(capacity, dtype=np.float32)
+        self.ret_buf = np.zeros(capacity, dtype=np.float32)
+        self.val_buf = np.zeros(capacity, dtype=np.float32)
+        self.adv_buf = np.zeros(capacity, dtype=np.float32)
+        self.logp_buf = np.zeros(capacity, dtype=np.float32)
+        self.gamma, self.lamda = gamma, lamda
+        self.ptr, self.traj_idx = 0, 0
+
+    def add_sample(self, obs, act, rew, val, logp):
+        self.obs_buf[self.ptr]=obs
+        self.act_buf[self.ptr]=act
+        self.rew_buf[self.ptr]=rew
+        self.val_buf[self.ptr]=val
+        self.logp_buf[self.ptr]=logp
+        self.ptr += 1
+
+    def end_trajectory(self, last_value = 0):
+        path_slice = slice(self.traj_idx, self.ptr)
+        rews = np.append(self.rew_buf[path_slice], last_value)
+        vals = np.append(self.val_buf[path_slice], last_value)
+        deltas = rews[:-1] + self.gamma*vals[1:] - vals[:-1]
+        self.adv_buf[path_slice] = discount_cumsum(deltas, self.gamma*self.lamda) # GAE
+        self.ret_buf[path_slice] = discount_cumsum(rews, self.gamma)[:-1] # rewards-to-go
+        self.traj_idx = self.ptr
+
+    def sample(self):
+        s = slice(0,self.ptr)
+        adv_mean, adv_std = np.mean(self.adv_buf[s]), np.std(self.adv_buf[s])
+        self.adv_buf[s] = (self.adv_buf[s]-adv_mean) / adv_std
+        data = dict(
+            obs=self.obs_buf[s],
+            act=self.act_buf[s],
+            ret=self.ret_buf[s],
+            logp=self.logp_buf[s],
+            adv=self.adv_buf[s],
+            )
+        self.ptr, self.traj_idx = 0, 0
+        return data
+
+class PPOAgent:
+    def __init__(self, actor, critic, pi_lr, q_lr, clip_ratio, beta, target_kld):
+        self.pi = actor
+        self.q = critic
+        self.pi_optimizer = tf.keras.optimizers.Adam(pi_lr)
+        self.q_optimizer = tf.keras.optimizers.Adam(q_lr)
+        self.clip_r = clip_ratio
+        self.target_kld = target_kld
+        self.beta = beta
+
+    def policy(self, obs_seq):
+        dim = np.array(obs_seq).shape
+        logits = self.pi(np.reshape(np.array(obs_seq),[1,dim[0],dim[1]]))
+        dist = tfp.distributions.Categorical(logits=logits)
+        action = tf.squeeze(dist.sample()).numpy()
+        logprob = tf.squeeze(dist.log_prob(action)).numpy()
+        return action, logprob
+
+    def value(self, obs_seq):
+        dim = np.array(obs_seq).shape
+        val = self.q(np.reshape(np.array(obs_seq),[1,dim[0],dim[1]]))
+        return tf.squeeze(val).numpy()
+
+    def learn(self, buffer, pi_iter=80, q_iter=80):
+        (obs,act,ret,old_logp,adv) = buffer.sample()
+        with tf.GradientTape() as tape:
+            tape.watch(self.pi.trainable_variables)
+            logits=self.pi(obs)
+            logp = tfp.distributions.Categorical(logits=logits).log_prob(act)
+            ratio = tf.exp(logp - old_logp) # pi/old_pi
+            clip_adv = tf.clip_by_value(ratio, 1-self.clip_r, 1+self.clip_r)*adv
+            pi_loss = -tf.math.reduce_mean(tf.math.minimum(ratio*adv, clip_adv))
+        pi_grad = tape.gradient(pi_loss, self.pi.trainable_variables)
+        for _ in range(pi_iter):
+            self.pi_optimizer.apply_gradients(zip(pi_grad, self.pi.trainable_variables))
+            logp = tfp.distributions.Categorical(logits=self.pi(obs)).log_prob(act)
+            approx_kld = tf.reduce_mean(old_logp-logp)
+            if approx_kld > 1.5*self.target_kld:
+                break
+
+        with tf.GradientTape() as tape:
+            tape.watch(self.q.trainable_variables)
+            q_loss = tf.keras.losses.MSE(ret, self.q(obs))
+        q_grad = tape.gradient(q_loss, self.q.trainable_variables)
+        for _ in range(q_iter):
+            self.q_optimizer.apply_gradients(zip(q_grad, self.q.trainable_variables))
+
+def ppo_train(env,max_eps):
+    obs_dim = env.observation_space.shape[0]
+    act_dim = env.action_space.n
+    print("state {}, action {}".format(obs_dim, act_dim))
+
+    seq_len = 10
+    actor = build_rnn_model(n_hidden=seq_len,n_input=obs_dim,n_output=act_dim,seq_len=seq_len)
+    critic = build_rnn_model(n_hidden=seq_len,n_input=obs_dim,n_output=1,seq_len=seq_len)
+
+    buffer = PPORolloutBuffer(obs_dim,capacity=10000,gamma=0.99,lamda=0.97)
+    agent = RPPOAgent(actor,critic,pi_lr=3e-4,q_lr=1e-3,clip_ratio=0.2,beta=1e-3,target_kld=0.01)
+
+    ep_ret_list, avg_ret_list = [], []
+    t, update_after = 0, 1e3
+    total_episodes, max_ep_steps = 500, 500
+    for ep in range(total_episodes):
+        done, ep_ret, step = False, 0, 0
+        state = env.reset()
+        o_seq = deque(maxlen=seq_len)
+        for i in range(seq_len):
+            o_seq.append(np.zeros(obs_dim))
+        while not done and step < max_ep_steps:
+            o = state[0]
+            o_seq.append(o)
+            a, logp = agent.policy(o_seq)
+            value = agent.value(o_seq)
+            new_state = env.step(a)
+            r, done = new_state[1], new_state[2]
+            buffer.add_sample(o,a,r,value,logp)
+            state = new_state
+            ep_ret += r
+            step += 1
+            t += 1
+
+        last_value = 0 if done else agent.value(state[0])
+        buffer.end_trajectory(last_value)
+        if buffer.ptr > update_after or ep+1 == total_episodes:
+            agent.learn(buffer)
+
+        ep_ret_list.append(ep_ret)
+        avg_ret = np.mean(ep_ret_list[-30:])
+        avg_ret_list.append(avg_ret)
+        print("Episode *{}* average reward is {:.4f}, episode length {}".format(ep, avg_ret, step))
+
+
+
+
 if __name__ == '__main__':
     env = gym.make("LunarLander-v2", continuous=False, render_mode='human')
-    #ep_returns = rdqn_train(env,300)
-    ep_returns = dqn_train(env,300)
+    #ep_returns = rdqn_train(env,500)
+    ep_returns = dqn_train(env,200)
     plt.plot(ep_returns)
     plt.xlabel('Episode')
     plt.ylabel('Reward')
