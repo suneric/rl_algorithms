@@ -97,9 +97,9 @@ class PPO:
         return action and log probability given an observation based on policy network
         """
         logits = self.pi(tf.expand_dims(tf.convert_to_tensor(obs),0))
-        dist = tfp.distributions.Categorical(logits=logits)
-        action = tf.squeeze(dist.sample()).numpy()
-        logprob = tf.squeeze(dist.log_prob(action)).numpy()
+        pmf = tfp.distributions.Categorical(logits=logits)
+        action = tf.squeeze(pmf.sample()).numpy()
+        logprob = tf.squeeze(pmf.log_prob(action)).numpy()
         return action, logprob
 
     def value(self, obs):
@@ -135,27 +135,27 @@ class PPO:
         """
         with tf.GradientTape() as tape:
             tape.watch(self.pi.trainable_variables)
-            logits=self.pi(obs)
-            logp = tfp.distributions.Categorical(logits=logits).log_prob(act)
-            ratio = tf.exp(logp - old_logp) # pi/old_pi
+            pmf = tfp.distributions.Categorical(logits=self.pi(obs))
+            logp = pmf.log_prob(act)
+            ratio = tf.exp(logp-old_logp) # pi/old_pi
             clip_adv = tf.clip_by_value(ratio, 1-self.clip_r, 1+self.clip_r)*adv
-            # pmf = tf.nn.softmax(logits=logits) # probability
-            # ent = tf.math.reduce_sum(-pmf*tf.math.log(pmf),axis=-1) # entropy
-            # pi_loss = -tf.math.reduce_mean(tf.math.minimum(ratio*adv, clip_adv)) + self.beta*ent
-            pi_loss = -tf.math.reduce_mean(tf.math.minimum(ratio*adv, clip_adv))
+            obj = tf.minimum(ratio*adv, clip_adv) + self.bata*pmf.entropy()
+            pi_loss = -tf.reduce_mean(obj)
+            approx_kld = old_logp-logp
         pi_grad = tape.gradient(pi_loss, self.pi.trainable_variables)
         for _ in range(pi_iter):
             self.pi_optimizer.apply_gradients(zip(pi_grad, self.pi.trainable_variables))
             logp = tfp.distributions.Categorical(logits=self.pi(obs)).log_prob(act)
-            approx_kld = tf.reduce_mean(old_logp-logp)
-            if approx_kld > 1.5*self.target_kld:
+            kld = tf.reduce_mean(approx_kld)
+            if kld > 1.5*self.target_kld:
                 break
         """
         Fit value network
         """
         with tf.GradientTape() as tape:
             tape.watch(self.q.trainable_variables)
-            q_loss = tf.keras.losses.MSE(ret, self.q(obs))
+            val = self.q(obs)
+            q_loss = tf.reduce_mean((ret-val)**2)
         q_grad = tape.gradient(q_loss, self.q.trainable_variables)
         for _ in range(q_iter):
             self.q_optimizer.apply_gradients(zip(q_grad, self.q.trainable_variables))

@@ -62,20 +62,24 @@ def zero_obs_seq(obs_dim,seq_len):
 
 class PPORolloutBuffer:
     def __init__(self, obs_dim, capacity, gamma=0.99, lamda=0.95, seq_len=None):
-        self.obs_buf = np.zeros((capacity, obs_dim), dtype=np.float32)
-        self.act_buf = np.zeros(capacity, dtype=np.int32)
-        self.rew_buf = np.zeros(capacity, dtype=np.float32)
-        self.ret_buf = np.zeros(capacity, dtype=np.float32)
-        self.val_buf = np.zeros(capacity, dtype=np.float32)
-        self.adv_buf = np.zeros(capacity, dtype=np.float32)
-        self.logp_buf = np.zeros(capacity, dtype=np.float32)
-        self.gamma, self.lamda = gamma, lamda
-        self.ptr, self.traj_idx = 0, 0
         self.obs_dim = obs_dim
+        self.capacity = capacity
+        self.gamma, self.lamda = gamma, lamda
         self.seq_len = seq_len
-        self.recurrent = seq_len is not None
+        self.recurrent = self.seq_len is not None
+        self.ptr, self.traj_idx = 0, 0
+        self.reset()
+
+    def reset(self):
+        self.obs_buf = np.zeros((self.capacity,self.obs_dim), dtype=np.float32)
+        self.act_buf = np.zeros(self.capacity, dtype=np.int32)
+        self.rew_buf = np.zeros(self.capacity, dtype=np.float32)
+        self.ret_buf = np.zeros(self.capacity, dtype=np.float32)
+        self.val_buf = np.zeros(self.capacity, dtype=np.float32)
+        self.adv_buf = np.zeros(self.capacity, dtype=np.float32)
+        self.logp_buf = np.zeros(self.capacity, dtype=np.float32)
         if self.recurrent:
-            self.obs_seq_buf = np.zeros((capacity,seq_len,obs_dim), dtype=np.float32)
+            self.obs_seq_buf = np.zeros((self.capacity,self.seq_len,self.obs_dim), dtype=np.float32)
 
     def add_sample(self, obs, act, rew, val, logp):
         self.obs_buf[self.ptr]=obs
@@ -103,30 +107,31 @@ class PPORolloutBuffer:
         adv_mean, adv_std = np.mean(self.adv_buf), np.std(self.adv_buf)
         self.adv_buf = (self.adv_buf - adv_mean) / adv_std
         batch = (
-            tf.convert_to_tensor(self.obs_seq_buf if self.recurrent else self.obs_buf),
-            tf.convert_to_tensor(self.act_buf),
-            tf.convert_to_tensor(self.ret_buf),
-            tf.convert_to_tensor(self.logp_buf),
-            tf.convert_to_tensor(self.adv_buf),
+            self.obs_seq_buf if self.recurrent else self.obs_buf,
+            self.act_buf,
+            self.ret_buf,
+            self.logp_buf,
+            self.adv_buf,
         )
         self.ptr, self.traj_idx = 0, 0
+        self.reset()
         return batch
 
 class PPOAgent:
-    def __init__(self, actor, critic, pi_lr, q_lr, clip_ratio, target_kl):
+    def __init__(self, actor, critic, pi_lr, q_lr, clip_ratio, target_kld, beta):
         self.pi = actor
         self.q = critic
         self.pi_optimizer = tf.keras.optimizers.Adam(pi_lr)
         self.q_optimizer = tf.keras.optimizers.Adam(q_lr)
         self.clip_r = clip_ratio
-        self.target_kl = target_kl
+        self.target_kld = target_kld
+        self.beta = beta
 
     def policy(self, obs):
         obs = tf.expand_dims(tf.convert_to_tensor(obs),0)
-        logits = self.pi(obs)
-        dist = tfp.distributions.Categorical(logits=logits)
-        action = tf.squeeze(dist.sample()).numpy()
-        logprob = tf.squeeze(dist.log_prob(action)).numpy()
+        pmf = tfp.distributions.Categorical(logits=self.pi(obs))
+        action = tf.squeeze(pmf.sample()).numpy()
+        logprob = tf.squeeze(pmf.log_prob(action)).numpy()
         return action, logprob
 
     def value(self, obs):
@@ -137,34 +142,41 @@ class PPOAgent:
     def update_policy(self,obs,act,old_logp,adv):
         with tf.GradientTape() as tape:
             tape.watch(self.pi.trainable_variables)
-            logits=self.pi(obs)
-            logp = tfp.distributions.Categorical(logits=logits).log_prob(act)
+            pmf = tfp.distributions.Categorical(logits=self.pi(obs))
+            logp = pmf.log_prob(act)
             ratio = tf.exp(logp-old_logp) # pi/old_pi
             clip_adv = tf.clip_by_value(ratio, 1-self.clip_r, 1+self.clip_r)*adv
-            pi_loss = -tf.reduce_mean(tf.math.minimum(ratio*adv, clip_adv))
+            obj = tf.minimum(ratio*adv, clip_adv) + self.beta*pmf.entropy()
+            pi_loss = -tf.reduce_mean(obj)
+            approx_kld = old_logp - logp
         pi_grad = tape.gradient(pi_loss, self.pi.trainable_variables)
         self.pi_optimizer.apply_gradients(zip(pi_grad, self.pi.trainable_variables))
-        logits=self.pi(obs)
-        logp = tfp.distributions.Categorical(logits=logits).log_prob(act)
-        kl = tf.reduce_mean(old_logp-logp)
-        kl = tf.reduce_sum(kl)
-        return kl
+        kld = tf.reduce_mean(approx_kld)
+        return kld
 
     def update_value_function(self,obs,ret):
         with tf.GradientTape() as tape:
             tape.watch(self.q.trainable_variables)
-            value = self.q(obs)
-            q_loss = tf.reduce_mean((ret-value)**2)
+            val = self.q(obs)
+            q_loss = tf.reduce_mean((ret-val)**2)
         q_grad = tape.gradient(q_loss, self.q.trainable_variables)
         self.q_optimizer.apply_gradients(zip(q_grad, self.q.trainable_variables))
 
-    def learn(self,buffer,pi_iter=80,q_iter=80):
-        (obs,act,ret,logp,adv) = buffer.sample()
+    def learn(self,buffer,pi_iter=80,q_iter=80,batch_size=64):
+        (obs_buf,act_buf,ret_buf,logp_buf,adv_buf) = buffer.sample()
         for _ in range(pi_iter):
-            kl = self.update_policy(obs,act,logp,adv)
-            if kl > 1.5*self.target_kl:
+            idxs = np.random.choice(buffer.capacity,batch_size)
+            obs = tf.convert_to_tensor(obs_buf[idxs])
+            act = tf.convert_to_tensor(act_buf[idxs])
+            logp = tf.convert_to_tensor(logp_buf[idxs])
+            adv = tf.convert_to_tensor(adv_buf[idxs])
+            kld = self.update_policy(obs,act,logp,adv)
+            if kld > self.target_kld:
                 break
         for _ in range(q_iter):
+            idxs = np.random.choice(buffer.capacity,batch_size)
+            obs = tf.convert_to_tensor(obs_buf[idxs])
+            ret = tf.convert_to_tensor(ret_buf[idxs])
             self.update_value_function(obs,ret)
 
 def rppo_train(env, num_episodes, train_steps):
@@ -174,8 +186,8 @@ def rppo_train(env, num_episodes, train_steps):
     seq_len = 16
     actor = build_rnn_model(n_hidden=64,n_input=obs_dim,n_output=act_dim,seq_len=seq_len)
     critic = build_rnn_model(n_hidden=64,n_input=obs_dim,n_output=1,seq_len=seq_len)
-    buffer = PPORolloutBuffer(obs_dim,capacity=2000,gamma=0.99,lamda=0.97,seq_len=seq_len)
-    agent = PPOAgent(actor,critic,pi_lr=3e-4,q_lr=1e-3,clip_ratio=0.2,target_kl=0.01)
+    buffer = PPORolloutBuffer(obs_dim,capacity=train_steps,gamma=0.99,lamda=0.97,seq_len=seq_len)
+    agent = PPOAgent(actor,critic,pi_lr=3e-4,q_lr=1e-3,clip_ratio=0.2,target_kld=0.01, beta=0.01)
 
     ep_returns, t = [], 0
     for ep in range(num_episodes):
@@ -213,7 +225,7 @@ def ppo_train(env, num_episodes, train_steps):
     actor = build_mlp_model(n_hidden=128,n_input=obs_dim,n_output=act_dim)
     critic = build_mlp_model(n_hidden=128,n_input=obs_dim,n_output=1)
     buffer = PPORolloutBuffer(obs_dim,capacity=train_steps,gamma=0.99,lamda=0.97)
-    agent = PPOAgent(actor,critic,pi_lr=3e-4,q_lr=1e-3,clip_ratio=0.2,target_kl=0.01)
+    agent = PPOAgent(actor,critic,pi_lr=3e-4,q_lr=1e-3,clip_ratio=0.2,target_kld=0.01, beta=0.01)
 
     ep_returns, t = [], 0
     for ep in range(num_episodes):
@@ -242,10 +254,11 @@ def ppo_train(env, num_episodes, train_steps):
 
 if __name__ == '__main__':
     env = gym.make("LunarLander-v2", continuous=False, render_mode='human')
-    returns = rppo_train(env,1000,2000)
-    returns = smoothExponential(returns,0.996)
+    returns = rppo_train(env,500,2000)
     env.close()
-    plt.plot(returns)
+    plt.plot(returns,'k--',linewidth=1)
+    plt.plot(smoothExponential(returns,0.95),'g-',linewidth=2)
     plt.xlabel('Episode')
-    plt.ylabel('Avg. Return')
+    plt.ylabel('Return')
+    plt.legend(["Return", "Smoothed Return"])
     plt.show()
