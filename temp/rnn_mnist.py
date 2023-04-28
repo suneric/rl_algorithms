@@ -1,3 +1,6 @@
+"""
+https://www.tensorflow.org/guide/keras/rnn
+"""
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras.models import Sequential

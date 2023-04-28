@@ -171,29 +171,30 @@ class PPOAgent:
             logp = tf.convert_to_tensor(logp_buf[idxs])
             adv = tf.convert_to_tensor(adv_buf[idxs])
             kld = self.update_policy(obs,act,logp,adv)
-            if kld > self.target_kld:
-                break
+            # print(kld)
+            # if kld > self.target_kld:
+            #     break
         for _ in range(q_iter):
             idxs = np.random.choice(buffer.capacity,batch_size)
             obs = tf.convert_to_tensor(obs_buf[idxs])
             ret = tf.convert_to_tensor(ret_buf[idxs])
             self.update_value_function(obs,ret)
 
-def rppo_train(env, num_episodes, train_steps):
+def rppo_train(env, num_episodes, train_steps,max_step):
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.n
     print("state {}, action {}".format(obs_dim, act_dim))
-    seq_len = 16
+    seq_len = 64
     actor = build_rnn_model(n_hidden=64,n_input=obs_dim,n_output=act_dim,seq_len=seq_len)
     critic = build_rnn_model(n_hidden=64,n_input=obs_dim,n_output=1,seq_len=seq_len)
     buffer = PPORolloutBuffer(obs_dim,capacity=train_steps,gamma=0.99,lamda=0.97,seq_len=seq_len)
-    agent = PPOAgent(actor,critic,pi_lr=3e-4,q_lr=1e-3,clip_ratio=0.2,target_kld=0.01, beta=0.01)
+    agent = PPOAgent(actor,critic,pi_lr=3e-4,q_lr=1e-3,clip_ratio=0.2,target_kld=1e-2, beta=1e-3)
 
     ep_returns, t = [], 0
     for ep in range(num_episodes):
-        state, done, ep_ret = env.reset(), False, 0
+        state, done, ep_ret, step = env.reset(), False, 0, 0
         o_seq = zero_obs_seq(obs_dim,seq_len)
-        while True:
+        while step < max_step:
             o = state[0]
             o_seq.append(o)
             a, logp = agent.policy(o_seq)
@@ -204,6 +205,7 @@ def rppo_train(env, num_episodes, train_steps):
             state = new_state
             ep_ret += r
             t += 1
+            step += 1
             if done or (t % train_steps == 0):
                 o1_seq = o_seq.copy()
                 o1_seq.append(state[0])
@@ -218,19 +220,19 @@ def rppo_train(env, num_episodes, train_steps):
         print("Episode: {}, Total Return: {:.4f}, Total Steps: {}".format(ep+1, ep_ret, t))
     return ep_returns
 
-def ppo_train(env, num_episodes, train_steps):
+def ppo_train(env, num_episodes, train_steps, max_step):
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.n
     print("state {}, action {}".format(obs_dim, act_dim))
     actor = build_mlp_model(n_hidden=128,n_input=obs_dim,n_output=act_dim)
     critic = build_mlp_model(n_hidden=128,n_input=obs_dim,n_output=1)
     buffer = PPORolloutBuffer(obs_dim,capacity=train_steps,gamma=0.99,lamda=0.97)
-    agent = PPOAgent(actor,critic,pi_lr=3e-4,q_lr=1e-3,clip_ratio=0.2,target_kld=0.01, beta=0.01)
+    agent = PPOAgent(actor,critic,pi_lr=3e-4,q_lr=1e-3,clip_ratio=0.2,target_kld=1e-2,beta=1e-3)
 
     ep_returns, t = [], 0
     for ep in range(num_episodes):
-        state, done, ep_ret = env.reset(), False, 0
-        while True:
+        state, done, ep_ret, step = env.reset(), False, 0, 0
+        while step < max_step:
             o = state[0]
             a, logp = agent.policy(o)
             value = agent.value(o)
@@ -240,6 +242,7 @@ def ppo_train(env, num_episodes, train_steps):
             state = new_state
             ep_ret += r
             t += 1
+            step += 1
             if done or (t % train_steps == 0):
                 last_value = 0 if done else agent.value(state[0])
                 buffer.end_trajectory(last_value)
@@ -254,7 +257,7 @@ def ppo_train(env, num_episodes, train_steps):
 
 if __name__ == '__main__':
     env = gym.make("LunarLander-v2", continuous=False, render_mode='human')
-    returns = rppo_train(env,500,2000)
+    returns = rppo_train(env,500,1500,500)
     env.close()
     plt.plot(returns,'k--',linewidth=1)
     plt.plot(smoothExponential(returns,0.95),'g-',linewidth=2)
